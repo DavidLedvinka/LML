@@ -74,7 +74,7 @@ lemma measurable_argmax [MeasurableSpace ι] [MeasurableEq α] [MeasurableSup₂
     refine MeasurableSet.iUnion fun S ↦ (.iUnion fun hS ↦ ?_)
     exact measurableSet_eq_fun (by fun_prop) measurable_const
   ext f
-  simp only [Set.mem_setOf_eq, Set.mem_iUnion, exists_prop, exists_eq_right']
+  simp only [Set.mem_ofPred_eq, Set.mem_iUnion, exists_prop, exists_eq_right']
   constructor
   · intro hf x hx
     rw [← hf]
