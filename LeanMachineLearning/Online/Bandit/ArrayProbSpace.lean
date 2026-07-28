@@ -436,7 +436,7 @@ lemma stepsUntil_indicator_congr (alg : Algorithm 𝓐 R) (a : 𝓐) (m n : ℕ)
         ω =
       {ω | action alg (n + 1) ω = a ∧ pullCount (action alg) a (n + 1) ω = m}.indicator
         (fun _ ↦ 1) ω' := by
-  simp only [Set.indicator_apply, Set.mem_setOf_eq]
+  simp only [Set.indicator_apply, Set.mem_ofPred_eq]
   simp_rw [stepsUntil_congr alg a m n hω1 hω2_ne hω2_eq]
 
 end Congruence
@@ -822,12 +822,12 @@ lemma indepFun_snd_apply_aux (ν : Kernel 𝓐 R) [IsMarkovKernel ν] (a : 𝓐)
         have h_indep := indep_iSup_of_disjoint h_le h_iindep' h_disjoint
         convert h_indep using 2
         · simp only [Set.mem_singleton_iff, iSup_iSup_eq_left]
-        · simp only [ne_eq, Set.mem_setOf_eq, iSup_subtype']
+        · simp only [ne_eq, Set.mem_ofPred_eq, iSup_subtype']
       have h_proj_preimage : proj ⁻¹' t' = (fun ω₂ ↦ (rows_lt_m ω₂, other_cols ω₂)) ⁻¹'
           {p | ((fun r k ↦ if hm : m ≠ 0 then
             r ⟨min k (m - 1), Finset.mem_Iio.mpr (h_row_bound hm k)⟩
             else Nonempty.some inferInstance) p.1, p.2) ∈ t'}
-          := by ext ω₂; simp only [Set.mem_preimage, Set.mem_setOf_eq, h_proj_factor]
+          := by ext ω₂; simp only [Set.mem_preimage, Set.mem_ofPred_eq, h_proj_factor]
       rw [indepFun_iff_measure_inter_preimage_eq_mul] at h_indep_combined
       rw [h_proj_preimage]
       let T : Set ((Iio m → R) × (ℕ → {b : 𝓐 // b ≠ a} → R)) :=
@@ -920,7 +920,7 @@ lemma indepFun_snd_hist_cond [Countable 𝓐] (alg : Algorithm 𝓐 R)
     congr!
     congr with ω
     simp only [Set.mem_preimage, Set.mem_singleton_iff, Prod.mk.injEq, Set.indicator_apply,
-      Set.mem_setOf_eq, ite_eq_left_iff, not_and, zero_ne_one, imp_false,
+      Set.mem_ofPred_eq, ite_eq_left_iff, not_and, zero_ne_one, imp_false,
       Classical.not_imp, Decidable.not_not, and_congr_right_iff]
     intro ha
     simp [ha]
@@ -1073,7 +1073,7 @@ lemma hasCondDistrib_reward_pullCount_action
         pullCount (action alg) a (n + 1) ω = m}).indicator 1 ⁻¹' {1}] := by
     congr with ω
     simp only [Set.mem_preimage, Set.mem_singleton_iff, Prod.mk.injEq, Set.indicator_apply,
-      Set.mem_setOf_eq, Pi.one_apply, ite_eq_left_iff, not_and, zero_ne_one, imp_false,
+      Set.mem_ofPred_eq, Pi.one_apply, ite_eq_left_iff, not_and, zero_ne_one, imp_false,
       Classical.not_imp, Decidable.not_not, and_congr_right_iff]
     intro ha
     simp [ha]
@@ -1088,7 +1088,7 @@ lemma hasCondDistrib_reward_pullCount_action
     · rw [Measure.map_apply (by fun_prop) (by simp)] at ham
       convert ham
       ext ω
-      simp only [Set.mem_preimage, Set.indicator_apply, Set.mem_setOf_eq, Pi.one_apply,
+      simp only [Set.mem_preimage, Set.indicator_apply, Set.mem_ofPred_eq, Pi.one_apply,
         Set.mem_singleton_iff, ite_eq_left_iff, not_and, zero_ne_one, imp_false, Classical.not_imp,
         Decidable.not_not, Prod.mk.injEq, and_congr_right_iff]
       intro ha
@@ -1150,7 +1150,7 @@ lemma hasCondDistrib_reward_hist_action_pullCount
     · simp
     · convert ham
       ext ω
-      simp only [Set.mem_preimage, Set.indicator_apply, Set.mem_setOf_eq, Pi.one_apply,
+      simp only [Set.mem_preimage, Set.indicator_apply, Set.mem_ofPred_eq, Pi.one_apply,
         Set.mem_singleton_iff, ite_eq_left_iff, not_and, zero_ne_one, imp_false, Classical.not_imp,
         Decidable.not_not, Prod.mk.injEq, and_congr_right_iff]
       intro ha
