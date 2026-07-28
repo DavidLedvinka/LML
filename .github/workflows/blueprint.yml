@@ -24,8 +24,18 @@ permissions:
   actions: write          # Write access to GitHub Actions
 
 env:
-  LEAN_EXPOSITION_REPO: LeanMachineLearning/exposition
-  LEAN_EXPOSITION_REF: main
+  REFEREE_REPO: LeanMachineLearning/exposition
+  # The referee release to use. Leave empty for the most recent one; set a tag (e.g. `v0.1.0`) to
+  # pin the site generator, which is worth doing once the output is being read by anyone.
+  #
+  # A *release* rather than a run artifact on purpose: release assets of a public repository need no
+  # authentication and never expire, while a cross-repository artifact download needs a PAT with
+  # `actions:read` (a workflow's own GITHUB_TOKEN cannot reach another repository's artifacts) and
+  # is deleted after 90 days.
+  REFEREE_VERSION: ""
+  # Kept as `exposition` rather than renamed to `referee` along with the tool: this path is the
+  # published URL, and existing links to it would break.
+  REFEREE_SITE_URL: https://leanmachinelearning.org/LML/exposition
 
 jobs:
   build_project:
@@ -59,29 +69,89 @@ jobs:
         run: |
           ./scripts/build_docs.sh
 
-      - name: Clone lean-exposition
+      - name: Download referee binary
         if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone --depth 1 --branch "$LEAN_EXPOSITION_REF" \
-            "https://github.com/$LEAN_EXPOSITION_REPO" /tmp/lean-exposition
+          set -euo pipefail
+          mkdir -p /tmp/referee
+          gh release download ${REFEREE_VERSION:+"$REFEREE_VERSION"} \
+            -R "$REFEREE_REPO" \
+            --pattern 'referee-linux-x86_64-*.tar.gz' \
+            --dir /tmp/referee --clobber
+          tar -xzf /tmp/referee/referee-linux-x86_64-*.tar.gz -C /tmp/referee
+          referee_bin=$(echo /tmp/referee/referee-linux-x86_64-*/referee)
+          chmod +x "$referee_bin"
+          echo "REFEREE_BIN=$referee_bin" >> "$GITHUB_ENV"
 
-      - name: Build exposition binary
-        if: github.event_name == 'push'
-        run: |
-          cd /tmp/lean-exposition && lake build exposition
-          echo "EXPOSITION_BIN=/tmp/lean-exposition/.lake/build/bin/exposition" >> "$GITHUB_ENV"
+          # `referee` is a Lean executable built with `supportInterpreter := true`, so it loads the
+          # shared library of the toolchain it was compiled against and has to match this project's.
+          # Checked here because the alternative is a link-time failure four steps later that says
+          # nothing about the cause.
+          want=$(tr -d '[:space:]' < lean-toolchain)
+          got=$(jq -r .lean_toolchain "$(dirname "$referee_bin")/metadata.json" | tr -d '[:space:]')
+          if [ "$want" != "$got" ]; then
+            echo "::error::referee was built for $got but this project uses $want. Publish a \
+              referee release from a matching toolchain, or pin REFEREE_VERSION to one."
+            exit 1
+          fi
 
-      - name: Build exposition documentation
+      # The previous run's collected data, so the site can say what changed since it. Optional in
+      # every direction: the first run has nothing to download, a failed lookup is swallowed, and
+      # `build-site` simply omits the Changes page when no baseline reaches it.
+      - name: Fetch previous referee data for the revision diff
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_id=$(gh run list -R "$GITHUB_REPOSITORY" \
+            --workflow "${{ github.workflow }}" --branch "${{ github.ref_name }}" \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          [ -n "$run_id" ] || { echo "no earlier successful run; skipping the baseline"; exit 0; }
+          gh run download "$run_id" -R "$GITHUB_REPOSITORY" \
+            -n referee-data -D /tmp/referee-baseline
+          echo "REFEREE_BASELINE=/tmp/referee-baseline/referee-data.json" >> "$GITHUB_ENV"
+
+      - name: Build the referee site
         if: github.event_name == 'push'
         run: |
-          lake env "$EXPOSITION_BIN" \
-            --root LeanMachineLearning \
-            --repo-url https://github.com/LeanMachineLearning/LML \
-            --site-url https://leanmachinelearning.org/LML/exposition \
-            --output ./exposition \
-            --exclude-lib LMLTutorial
-          mkdir -p home_page/exposition
-          cp -r exposition/html-multi/* home_page/exposition
+          set -euo pipefail
+          # The phase split: everything needing a Lean environment produces data, and rendering is a
+          # pure function of that data. `--exclude-lib` applies to the three phases that import the
+          # project, and to none of `build-site`, which reads only the JSON. `highlight-extracted`
+          # is deliberately skipped — it re-elaborates every extracted file and costs more than the
+          # rest of this job combined; without it the standalone files are still written and linked,
+          # just not rendered inline.
+          lake env "$REFEREE_BIN" collect \
+            --root LeanMachineLearning --exclude-lib LMLTutorial --data referee-data.json
+          lake env "$REFEREE_BIN" extract \
+            --data referee-data.json --exclude-lib LMLTutorial --output ./referee-site
+          lake env "$REFEREE_BIN" highlight \
+            --data referee-data.json --output ./referee-site
+          # `--trust` is an editorial claim, not a derived fact: it says whoever publishes this site
+          # vouches for Mathlib and everything under it. Drop it and every upstream package counts
+          # as unaudited; name more packages to vouch for more.
+          "$REFEREE_BIN" build-site \
+            --data referee-data.json \
+            --output ./referee-site \
+            --repo-url "https://github.com/$GITHUB_REPOSITORY" \
+            --site-url "$REFEREE_SITE_URL" \
+            --trust mathlib \
+            ${REFEREE_BASELINE:+--baseline "$REFEREE_BASELINE"} \
+            ${REFEREE_BASELINE:+--baseline-label "the previous build"}
+
+      # Kept as an artifact so the *next* run can diff against it. Also the thing to download when
+      # you want to re-render the site locally without re-importing the project.
+      - name: Upload referee data
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: referee-data
+          path: referee-data.json
+          retention-days: 90
 
       - name: Compile blueprint and documentation
         uses: leanprover-community/docgen-action@7b5b9a1822650bd45aaeb4182d94bceba2030f89 # 2026-04-14
@@ -90,6 +160,16 @@ jobs:
           blueprint: false
           build-page: false
           deploy: false
+
+      # After the docs step, which writes into the same folder alongside `tutorial/` from
+      # `build_docs.sh`. Those steps only ever add, so the order is not load-bearing — but copying
+      # last keeps the referee output out of reach of anything else that writes there.
+      - name: Add the referee site to the home page
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          mkdir -p home_page/exposition
+          cp -r referee-site/html-multi/. home_page/exposition/
 
       - name: "Upload website (API documentation, blueprint and any home page)"
         if: github.event_name == 'push'
