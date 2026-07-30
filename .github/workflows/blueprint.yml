@@ -54,11 +54,21 @@ env:
   REFEREE_DATA: /tmp/referee-data/referee-data.json
   REFEREE_HASHES: /tmp/referee-data/hashes.jsonl
 
-  # The provenance ledger, committed to *this* repository rather than kept as an artifact: it is
-  # append-only and its whole value is that it remembers years of history, which a 90-day artifact
-  # cannot. Each run folds the current commit into it, so its resolution is this workflow's cadence
-  # — per commit, since this runs on every push to main.
-  REFEREE_PROVENANCE: provenance.json
+  # The provenance ledger, kept in *this* repository rather than as an artifact: it is append-only
+  # and its whole value is that it remembers years of history, which a 90-day artifact cannot. Each
+  # run folds the current commit into it, so its resolution is this workflow's cadence — per commit,
+  # since this runs on every push to main.
+  #
+  # It lives on a branch of its own, checked out under /tmp like the generated data above. Both
+  # halves matter. `main` here requires pull requests, which left GITHUB_TOKEN unable to push the
+  # ledger at all — every run folded one revision, failed with `GH006: Protected branch update
+  # failed`, and threw it away, so the ledger never got past a single revision. Classic branch
+  # protection has no bypass list an app can be added to; a branch of its own needs no repository
+  # settings changed. And the ledger must not sit in the working tree, or `git status --porcelain`
+  # reports it and stamps every fold as built from a revision nobody can check out.
+  REFEREE_PROVENANCE: /tmp/referee-data/provenance.json
+  REFEREE_LEDGER_BRANCH: referee-ledger
+  REFEREE_LEDGER_DIR: /tmp/referee-ledger
 
   # `semantic_hash` supplies the rename-invariant hashes the ledger and the revision diff are keyed
   # on. Leave the ref empty for the default branch; pin a tag or branch once the ledger matters,
@@ -165,6 +175,31 @@ jobs:
             --hashes "$REFEREE_HASHES" \
             --data "$REFEREE_DATA"
 
+      # The ledger from its own branch, into a clone of its own. A separate clone rather than a
+      # fetch into the project's repository: an orphan branch fetched at `--depth 1` leaves a
+      # shallow boundary behind, and `git blame` over the whole history is the other half of what
+      # `provenance` does a step later.
+      #
+      # A missing branch is the ordinary first run and not an error — the publish step below starts
+      # one.
+      - name: Fetch the provenance ledger
+        if: github.event_name == 'push'
+        env:
+          LEDGER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$REFEREE_PROVENANCE")"
+          rm -rf "$REFEREE_LEDGER_DIR"
+          remote="https://x-access-token:${LEDGER_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          if git clone --quiet --depth 1 --branch "$REFEREE_LEDGER_BRANCH" \
+               "$remote" "$REFEREE_LEDGER_DIR" 2>/dev/null &&
+             [ -f "$REFEREE_LEDGER_DIR/provenance.json" ]; then
+            cp "$REFEREE_LEDGER_DIR/provenance.json" "$REFEREE_PROVENANCE"
+            echo "ledger fetched from $REFEREE_LEDGER_BRANCH"
+          else
+            echo "no ledger on $REFEREE_LEDGER_BRANCH yet; this run starts one"
+          fi
+
       # Needs a git working tree and no Lean environment at all, so it is a phase of its own. Runs
       # before `extract`/`highlight`/`build_docs.sh`/docgen write into the tree, so that the
       # cleanliness it records is the repository's and not this job's leftovers.
@@ -190,27 +225,51 @@ jobs:
 
       # The ledger is only worth keeping if it survives the run that wrote it. Pushed with
       # GITHUB_TOKEN, which by design does not trigger another workflow run, so this cannot loop
-      # back into itself.
-      #
-      # A rejected push is a warning and not a failure: the fold is idempotent per commit and the
-      # next run folds whatever it finds, so losing a race costs one revision of resolution rather
-      # than correctness — and it must not take the deployment down with it.
-      - name: Commit the provenance ledger
+      # back into itself — and pushed to the ledger's own branch, so `main` requiring pull requests
+      # never enters into it.
+      - name: Publish the provenance ledger
         if: github.event_name == 'push'
+        env:
+          LEDGER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if git diff --quiet -- "$REFEREE_PROVENANCE" &&
-             [ -z "$(git ls-files --others --exclude-standard -- "$REFEREE_PROVENANCE")" ]; then
-            echo "ledger unchanged (already folded at this commit); nothing to commit"
-            exit 0
+          remote="https://x-access-token:${LEDGER_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          if [ ! -d "$REFEREE_LEDGER_DIR/.git" ]; then
+            mkdir -p "$REFEREE_LEDGER_DIR"
+            git -C "$REFEREE_LEDGER_DIR" init --quiet -b "$REFEREE_LEDGER_BRANCH"
+            git -C "$REFEREE_LEDGER_DIR" remote add origin "$remote"
           fi
+          cd "$REFEREE_LEDGER_DIR"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$REFEREE_PROVENANCE"
-          git commit -m "chore(referee): fold ${GITHUB_SHA:0:7} into the provenance ledger"
-          git push origin "HEAD:${GITHUB_REF_NAME}" ||
-            echo "::warning::could not push the provenance ledger; the next run will fold this \
+          # The tip as fetched, remembered before committing on top of it: the shallow clone above
+          # has no parent to ask for afterwards, and this is what tells a lost race apart from a
+          # rejected push further down.
+          base=$(git rev-parse HEAD 2>/dev/null || echo none)
+          cp "$REFEREE_PROVENANCE" provenance.json
+          git add provenance.json
+          if [ "$base" != none ] && git diff --cached --quiet; then
+            echo "ledger unchanged (already folded at this commit); nothing to push"
+            exit 0
+          fi
+          git commit --quiet -m "fold ${GITHUB_SHA:0:7} into the provenance ledger"
+          if git push --quiet origin "HEAD:$REFEREE_LEDGER_BRANCH"; then
+            exit 0
+          fi
+          # Two very different failures, which one warning used to cover alike. A concurrent run
+          # that got there first is transient: the fold is idempotent per commit, so the next run
+          # folds this revision together with the following one and nothing is lost but resolution.
+          # Anything else — a protected ledger branch, a missing `contents: write` — will never fix
+          # itself, and warning about it every run is how this ledger stayed one revision long.
+          if git fetch --quiet origin "$REFEREE_LEDGER_BRANCH" 2>/dev/null &&
+             [ "$base" != "$(git rev-parse FETCH_HEAD)" ]; then
+            echo "::warning::the ledger branch moved under this run; the next run folds this \
               revision together with the following one"
+          else
+            echo "::error::could not push the provenance ledger to $REFEREE_LEDGER_BRANCH. Check \
+              that the branch is not protected and that this job has contents: write."
+            exit 1
+          fi
 
       # The previous run's collected data, so the site can say what changed since it. Optional in
       # every direction: the first run has nothing to download, a failed lookup is swallowed, and
