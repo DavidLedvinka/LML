@@ -5,8 +5,9 @@ Authors: Gaëtan Serré
 -/
 module
 
-public import LeanMachineLearning.ForMathlib.Probability.Independence.IndepFun
 public import LeanMachineLearning.SequentialLearning.Algorithm
+
+import LeanMachineLearning.ForMathlib.Probability.Independence.IndepFun
 
 /-!
 # Random Sampling

@@ -7,10 +7,12 @@ module
 
 public import LeanMachineLearning.ForMathlib.MeasureTheory.Order.MeasurableArg
 public import LeanMachineLearning.ForMathlib.Order.Interval.Finset
-public import LeanMachineLearning.ForMathlib.Topology.Instances.ENNReal.Lemmas
 public import LeanMachineLearning.SequentialLearning.Algorithms.RandomSampling.Basic
 public import LeanMachineLearning.SequentialLearning.EvaluationEnv
-public import Mathlib.Topology.Separation.CompletelyRegular
+
+import Mathlib.Topology.Separation.CompletelyRegular
+import LeanMachineLearning.ForMathlib.Topology.Instances.ENNReal.Lemmas
+
 
 /-!
 # Random Sampling convergence lemmas
@@ -68,12 +70,11 @@ variable [PseudoMetricSpace 𝓐] [SecondCountableTopology 𝓐] [OpensMeasurabl
   [μ.IsOpenPosMeasure]
 
 /-- The minimum distance from sampled actions to any point tends to zero. -/
-theorem actions_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) (a : 𝓐) :
-    ∀ ε, 0 < ε → Tendsto (fun i => P
-      {x | ε ≤ (fun (j : Iic i) ↦ dist (A j.1 x) a).min}) atTop (𝓝 0) := by
+theorem actions_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) (a : 𝓐)
+    {ε : ℝ} (hε : 0 < ε) :
+    Tendsto (fun i => P {x | ε ≤ (fun (j : Iic i) ↦ dist (A j.1 x) a).min}) atTop (𝓝 0) := by
   set randomSampling_alg := randomSampling (𝓨 := 𝓨) μ
-  intro ε hε
-  refine tendsto_zero_le (g := fun n ↦ P (⋂ i ∈ Iic n, {x | ε ≤ dist (A i x) a})) ?_ ?_
+  refine tendsto_zero_of_le (g := fun n ↦ P (⋂ i ∈ Iic n, {x | ε ≤ dist (A i x) a})) ?_ ?_
   · have inter_prod (n : ℕ) : P (⋂ j ∈ Iic n, {x | ε ≤ dist (A j x) a}) =
         ∏ j ∈ Iic n, P {x | ε ≤ dist (A j x) a} := by
       refine iIndepSet.meas_biInter ?_ _
@@ -117,13 +118,13 @@ variable [PseudoMetricSpace 𝓨] [BorelSpace 𝓨] (hfc : Continuous f)
 /-- The minimum distance from image of actions to any function value tends to zero. -/
 lemma image_actions_tendsto_any
     (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hfc.measurable) P)
-    (a : 𝓐) : ∀ ε, 0 < ε → Tendsto (fun i => P
-      {x | ε ≤ (fun (j : Iic i) ↦ dist (f (A j.1 x)) (f a)).min}) atTop (𝓝 0) := by
-  intro ε hε
+    (a : 𝓐) {ε : ℝ} (hε : 0 < ε) :
+    Tendsto (fun i => P {x | ε ≤ (fun (j : Iic i) ↦
+      dist (f (A j.1 x)) (f a)).min}) atTop (𝓝 0) := by
   have hf := hfc.measurable
   rw [Metric.continuous_iff] at hfc
   obtain ⟨δ, hδ, hfc⟩ := hfc a ε hε
-  refine actions_tendsto_any h a δ hδ |> tendsto_zero_le <| ?_
+  refine actions_tendsto_any h a hδ |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
   simp only [Set.setOf_subset_setOf]
@@ -139,10 +140,9 @@ variable [StandardBorelSpace 𝓨] [Nonempty 𝓨]
 
 /-- The minimum distance from rewards to any function value tends to zero. -/
 lemma rewards_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hfc.measurable) P)
-    (a : 𝓐) : ∀ ε, 0 < ε → Tendsto (fun i => P
-      {x | ε ≤ (fun (j : Iic i) ↦ dist (Y j.1 x) (f a)).min}) atTop (𝓝 0) := by
-  intro ε hε
-  convert image_actions_tendsto_any hfc h a ε hε using 2 with n
+    (a : 𝓐) {ε : ℝ} (hε : 0 < ε) :
+    Tendsto (fun i => P {x | ε ≤ (fun (j : Iic i) ↦ dist (Y j.1 x) (f a)).min}) atTop (𝓝 0) := by
+  convert image_actions_tendsto_any hfc h a hε using 2 with n
   refine measure_congr ?_
   let g : ((Iic n) → 𝓨) → ℝ := fun r ↦ (fun i ↦ dist (r i) (f a)).min
   filter_upwards [feedback_evalEnv_ae_eq_eval_action_comp h g] with ω hω
@@ -155,11 +155,11 @@ variable {R : ℕ → Ω → ℝ} {f : 𝓐 → ℝ} (hfc : Continuous f) {a : �
 
 /-- The minimum image action converges to the function's global minimum. -/
 lemma tendsto_min₀ (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.measurable) P)
-    (hf_min : ∀ x, f a ≤ f x) : TendstoInMeasure P (fun n ω ↦
-      (fun (i : Iic n) ↦ f (A i.1 ω)).min) atTop (fun _ ↦ f a) := by
+    (hf_min : ∀ x, f a ≤ f x) :
+    TendstoInMeasure P (fun n ω ↦ (fun (i : Iic n) ↦ f (A i.1 ω)).min) atTop (fun _ ↦ f a) := by
   rw [tendstoInMeasure_iff_dist]
   intro ε hε
-  refine image_actions_tendsto_any hfc h a ε hε |> tendsto_zero_le <| ?_
+  refine image_actions_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
   simp only [Set.setOf_subset_setOf]
@@ -176,19 +176,19 @@ lemma tendsto_min₀ (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.mea
 
 /-- The minimum reward converges to the function's global minimum. -/
 lemma tendsto_min (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.measurable) P)
-    (hf_min : ∀ x, f a ≤ f x) : TendstoInMeasure P (fun n ω ↦
-      (fun (i : Iic n) ↦ R i.1 ω).min) atTop (fun _ ↦ f a) := by
+    (hf_min : ∀ x, f a ≤ f x) :
+    TendstoInMeasure P (fun n ω ↦ (fun (i : Iic n) ↦ R i.1 ω).min) atTop (fun _ ↦ f a) := by
   refine TendstoInMeasure.congr_left (fun n ↦ ?_) <| tendsto_min₀ hfc h hf_min
   filter_upwards [feedback_evalEnv_ae_eq_eval_action_comp h Function.min] with ω hω
   rw [← hω]
 
 /-- The maximum image action converges to the function's global maximum. -/
 lemma tendsto_max₀ (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.measurable) P)
-    (hf_max : ∀ x, f x ≤ f a) : TendstoInMeasure P (fun n ω ↦
-      (fun (i : Iic n) ↦ f (A i.1 ω)).max) atTop (fun _ ↦ f a) := by
+    (hf_max : ∀ x, f x ≤ f a) :
+    TendstoInMeasure P (fun n ω ↦ (fun (i : Iic n) ↦ f (A i.1 ω)).max) atTop (fun _ ↦ f a) := by
   rw [tendstoInMeasure_iff_dist]
   intro ε hε
-  refine image_actions_tendsto_any hfc h a ε hε |> tendsto_zero_le <| ?_
+  refine image_actions_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
   simp only [Set.setOf_subset_setOf]
