@@ -22,11 +22,11 @@ This file contains several convergence lemmas for the `randomSampling` algorithm
 
 ## Main statements
 
-* `hasLaw_rewards`: Each reward follows the distribution μ.map f.
-* `iIndep_rewards`: Rewards are mutually independent across time steps.
-* `actions_tendsto_any`: The minimum distance from sampled actions to any point in α tends to zero
+* `hasLaw_feeback`: Each feedback follows the distribution μ.map f.
+* `iIndep_feedback`: Feedbacks are mutually independent across time steps.
+* `action_tendsto_any`: The minimum distance from sampled actions to any point in α tends to zero
   in measure.
-* `rewards_tendsto_any`: The minimum distance from rewards to any value of `f` tends to zero in
+* `feedback_tendsto_any`: The minimum distance from rewards to any value of `f` tends to zero in
   measure.
 * `tendsto_min`: The minimum reward converges in measure to the global minimum value.
 * `tendsto_max`: The maximum reward converges in measure to the global maximum value.
@@ -50,7 +50,7 @@ section rewards
 variable [StandardBorelSpace 𝓨] [Nonempty 𝓨]
 
 /-- Each reward follows the distribution μ.map f. -/
-lemma hasLaw_rewards (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) (n : ℕ) :
+lemma hasLaw_feeback (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) (n : ℕ) :
     HasLaw (Y n) (μ.map f) P := by
   refine HasLaw.congr ?_ (feedback_evalEnv_ae_eq_eval_action h n)
   have hA := h.measurable_action n
@@ -58,7 +58,7 @@ lemma hasLaw_rewards (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) 
   rw [← Measure.map_map hf hA, (hasLaw_action h n).map_eq]
 
 /-- Rewards are mutually independent. -/
-lemma iIndep_rewards (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) :
+lemma iIndep_feedback (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) :
     iIndepFun Y P :=
   have (n : ℕ) : f ∘ A n =ᵐ[P] Y n :=
     (feedback_evalEnv_ae_eq_eval_action h n).symm
@@ -70,7 +70,7 @@ variable [PseudoMetricSpace 𝓐] [SecondCountableTopology 𝓐] [OpensMeasurabl
   [μ.IsOpenPosMeasure]
 
 /-- The minimum distance from sampled actions to any point tends to zero. -/
-theorem actions_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) (a : 𝓐)
+theorem action_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hf) P) (a : 𝓐)
     {ε : ℝ} (hε : 0 < ε) :
     Tendsto (fun i => P {x | ε ≤ (fun (j : Iic i) ↦ dist (A j.1 x) a).min}) atTop (𝓝 0) := by
   set randomSampling_alg := randomSampling (𝓨 := 𝓨) μ
@@ -116,7 +116,7 @@ theorem actions_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f 
 variable [PseudoMetricSpace 𝓨] [BorelSpace 𝓨] (hfc : Continuous f)
 
 /-- The minimum distance from image of actions to any function value tends to zero. -/
-lemma image_actions_tendsto_any
+lemma image_action_tendsto_any
     (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hfc.measurable) P)
     (a : 𝓐) {ε : ℝ} (hε : 0 < ε) :
     Tendsto (fun i => P {x | ε ≤ (fun (j : Iic i) ↦
@@ -124,7 +124,7 @@ lemma image_actions_tendsto_any
   have hf := hfc.measurable
   rw [Metric.continuous_iff] at hfc
   obtain ⟨δ, hδ, hfc⟩ := hfc a ε hε
-  refine actions_tendsto_any h a hδ |> tendsto_zero_of_le <| ?_
+  refine action_tendsto_any h a hδ |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
   simp only [Set.setOf_subset_setOf]
@@ -139,10 +139,10 @@ lemma image_actions_tendsto_any
 variable [StandardBorelSpace 𝓨] [Nonempty 𝓨]
 
 /-- The minimum distance from rewards to any function value tends to zero. -/
-lemma rewards_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hfc.measurable) P)
+lemma feedback_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f hfc.measurable) P)
     (a : 𝓐) {ε : ℝ} (hε : 0 < ε) :
     Tendsto (fun i => P {x | ε ≤ (fun (j : Iic i) ↦ dist (Y j.1 x) (f a)).min}) atTop (𝓝 0) := by
-  convert image_actions_tendsto_any hfc h a hε using 2 with n
+  convert image_action_tendsto_any hfc h a hε using 2 with n
   refine measure_congr ?_
   let g : ((Iic n) → 𝓨) → ℝ := fun r ↦ (fun i ↦ dist (r i) (f a)).min
   filter_upwards [feedback_evalEnv_ae_eq_eval_action_comp h g] with ω hω
@@ -159,7 +159,7 @@ lemma tendsto_min₀ (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.mea
     TendstoInMeasure P (fun n ω ↦ (fun (i : Iic n) ↦ f (A i.1 ω)).min) atTop (fun _ ↦ f a) := by
   rw [tendstoInMeasure_iff_dist]
   intro ε hε
-  refine image_actions_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
+  refine image_action_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
   simp only [Set.setOf_subset_setOf]
@@ -188,7 +188,7 @@ lemma tendsto_max₀ (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.mea
     TendstoInMeasure P (fun n ω ↦ (fun (i : Iic n) ↦ f (A i.1 ω)).max) atTop (fun _ ↦ f a) := by
   rw [tendstoInMeasure_iff_dist]
   intro ε hε
-  refine image_actions_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
+  refine image_action_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
   simp only [Set.setOf_subset_setOf]
