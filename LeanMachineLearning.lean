@@ -30,6 +30,11 @@ public import LeanMachineLearning.Online.Bandit.BayesRegret
 public import LeanMachineLearning.Online.Bandit.Regret
 public import LeanMachineLearning.Online.Bandit.RewardByCountMeasure
 public import LeanMachineLearning.Online.Bandit.SumRewards
+public import LeanMachineLearning.RDo.Examples
+public import LeanMachineLearning.RDo.ForInInstances
+public import LeanMachineLearning.RDo.MeasurableSpaceMonad
+public import LeanMachineLearning.RDo.MonadInstances
+public import LeanMachineLearning.RDo.RDo
 public import LeanMachineLearning.SequentialLearning.Algorithm
 public import LeanMachineLearning.SequentialLearning.AlgorithmDensity
 public import LeanMachineLearning.SequentialLearning.AlgorithmDensityBayes
