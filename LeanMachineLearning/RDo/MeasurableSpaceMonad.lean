@@ -114,7 +114,7 @@ class LawfulMeasurableSpaceFunctor
   /-- `mMap` of a measurable function is a measurable function. -/
   measurable_mMap {α β : Type u} [MeasurableSpace α] [MeasurableSpace β]
     {g : α → β} (hg : Measurable g) : Measurable ((g <$>ₘ ·) : f α → f β)
-  /-- The `mMapConst` implimentation is equivalent to the default implimentation. -/
+  /-- The `mMapConst` implementation is equivalent to the default implementation. -/
   mMap_const {α β : Type u} [MeasurableSpace α] [MeasurableSpace β] :
     (mMapConst : α → f β → f α) = mMap ∘ const β
   /-- `mMap` preserves identity. -/

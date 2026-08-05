@@ -81,7 +81,7 @@ def rdoForDecl := leading_parser
 @[doElem_parser] def rdoFor := leading_parser
   "for " >> sepBy1 rdoForDecl ", " >> "rdo " >> doSeq
 
-/-- Define expander for loops in `rdo` notation. Note this code mirrors core's implimentation for
+/-- Define expander for loops in `rdo` notation. Note this code mirrors core's implementation for
 `do` notation as much as possible. -/
 @[macro rdoFor] def expandRDoFor : Macro := fun stx => do
   match stx with
@@ -143,7 +143,7 @@ def rdoForDecl := leading_parser
     `(doElem| do $doElems*)
   | _ => Macro.throwUnsupported
 
-/-- Define loop elaborator for `rdo` notation. Note this code mirrors core's implimentation for
+/-- Define loop elaborator for `rdo` notation. Note this code mirrors core's implementation for
 `do` notation as much as possible. -/
 @[doElem_elab rdoFor] def elabRDoFor : DoElab := fun stx dec => do
   let `(rdoFor| for%$tk $[$h? : ]? $x:ident in $xs rdo $body) := stx | throwUnsupportedSyntax

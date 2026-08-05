@@ -81,7 +81,7 @@ section List
 
 variable {α β : Type*} [MeasurableSpace α] [MeasurableSpace β] [Ring α]
 
-/-- Implimentation for `forIn'` -/
+/-- implementation for `forIn'` -/
 @[inline]
 protected def List.measurableSpaceForIn' [MeasurableSpaceMonad m]
     {β : Type u} [mβ : MeasurableSpace β] (as : @& List α) (init : β)
