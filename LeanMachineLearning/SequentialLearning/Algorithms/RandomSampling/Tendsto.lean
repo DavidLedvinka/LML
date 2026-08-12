@@ -109,7 +109,7 @@ theorem action_tendsto_any (h : IsAlgEnvSeq A Y (randomSampling μ) (evalEnv f h
     exact (Metric.measure_ball_pos μ a hε).ne'
   · intro n
     refine measure_mono ?_
-    simp only [mem_Iic, Set.subset_iInter_iff, Set.setOf_subset_setOf]
+    simp only [mem_Iic, Set.subset_iInter_iff, Set.ofPred_subset_ofPred]
     intro i hi ω (hω : ε ≤ (fun (j : Iic n) ↦ dist (A j.1 ω) a).min)
     simp_all only [univ_eq_attach, le_inf'_iff, mem_attach, forall_const, Subtype.forall, mem_Iic]
 
@@ -127,7 +127,7 @@ lemma image_action_tendsto_any
   refine action_tendsto_any h a hδ |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
-  simp only [Set.setOf_subset_setOf]
+  simp only [Set.ofPred_subset_ofPred]
   intro ω hω
   rw [← argmin_spec]
   set j := argmin (fun (i : Iic n) ↦ dist (A i.1 ω) a)
@@ -162,7 +162,7 @@ lemma tendsto_min₀ (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.mea
   refine image_action_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
-  simp only [Set.setOf_subset_setOf]
+  simp only [Set.ofPred_subset_ofPred]
   intro ω hω
   rw [← argmin_spec]
   set j := argmin (fun (i : Iic n) ↦ dist (f (A i ω)) (f a))
@@ -191,7 +191,7 @@ lemma tendsto_max₀ (h : IsAlgEnvSeq A R (randomSampling μ) (evalEnv f hfc.mea
   refine image_action_tendsto_any hfc h a hε |> tendsto_zero_of_le <| ?_
   intro n
   refine measure_mono ?_
-  simp only [Set.setOf_subset_setOf]
+  simp only [Set.ofPred_subset_ofPred]
   intro ω hω
   rw [← argmin_spec]
   set j := argmin (fun (i : Iic n) ↦ dist (f (A i ω)) (f a))

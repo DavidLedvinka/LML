@@ -5,7 +5,6 @@ Authors: Rémy Degenne, Paulo Rauber
 -/
 module
 
-public import LeanMachineLearning.ForMathlib.MeasureTheory.Constructions.Polish.StandardBorel
 public import LeanMachineLearning.ForMathlib.Probability.Independence.CondIndepFun
 public import LeanMachineLearning.ForMathlib.Probability.Independence.IndepFun
 public import LeanMachineLearning.ForMathlib.Probability.Independence.IndepInfinitePi
