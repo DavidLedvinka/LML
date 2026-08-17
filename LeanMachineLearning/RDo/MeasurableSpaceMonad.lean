@@ -251,6 +251,7 @@ class MeasurableSpaceForIn' (ρ : Type uρ) (α : outParam (Type uα))
   forIn' {β : Type u} [MeasurableSpace β] (xs : ρ) (b : β)
     (f : (a : α) → a ∈ xs → β → m (ForInStep β)) : m β
 
+@[simps]
 instance (priority := 500) instMeasurableSpaceForInOfForIn'
     {ρ : Type uρ} {α : Type uα} {d : Membership α ρ} [MeasurableSpaceForIn' m ρ α d] :
     MeasurableSpaceForIn m ρ α where

@@ -104,6 +104,7 @@ protected def List.measurableSpaceForIn' [MeasurableSpaceMonad m]
           loop as' b this
   loop as init ⟨[], rfl⟩
 
+@[simps]
 instance [MeasurableSpaceMonad m] : MeasurableSpaceForIn' m (List α) α inferInstance where
   forIn' := List.measurableSpaceForIn'
 

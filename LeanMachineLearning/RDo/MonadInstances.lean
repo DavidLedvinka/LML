@@ -36,6 +36,7 @@ open MeasureTheory
 
 open MeasurableSpacePure MeasurableSpaceBind MeasurableSpaceFunctor MeasurableSpaceMonad
 
+@[simps]
 noncomputable instance : MeasurableSpaceMonad Measure where
   mPure := Measure.dirac
   mBind := Measure.bind

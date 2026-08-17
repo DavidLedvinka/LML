@@ -20,7 +20,7 @@ noncomputable def measureSample : Measure Bool := rdo
   let y ← bernoulliMeasure true false ⟨(1 : ℝ) / 2, by norm_num⟩
   return x + y
 
-def pseudoSample : PseudoRandomM Bool := rdo
+def pseudoSample : Rand Bool := do
   let x ← Random.randBool
   let y ← Random.randBool
   return x + y
