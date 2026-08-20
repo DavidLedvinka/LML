@@ -42,7 +42,7 @@ instance (n : ℕ) : IsMarkovKernel (iter_kernel μ n) := by
   unfold iter_kernel
   infer_instance
 
-example : IsProbabilityMeasure (init μ) := by
+instance : IsProbabilityMeasure (init μ) := by
   unfold init
   is_markov
 
