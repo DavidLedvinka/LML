@@ -2,17 +2,19 @@ module
 
 public import LeanMachineLearning.RDo.MonadInstances
 public import LeanMachineLearning.RDo.ForInInstances
+public import LeanMachineLearning.RDo.Tactic
 public import Mathlib
 
 @[expose] public section
 
-open MeasureTheory Measure Finset
+open MeasureTheory Measure Finset RDo ProbabilityTheory
 
 variable (μ : Measure ℝ) [IsProbabilityMeasure μ]
 
 noncomputable def init : Measure ℝ := rdo
   let x ← μ
-  return x
+  let y ← μ
+  return x + y
 
 noncomputable def iter {n : ℕ} (_hist : Iic n → ℝ × ℝ) : Measure ℝ := rdo
   let mut x := 0
@@ -21,24 +23,37 @@ noncomputable def iter {n : ℕ} (_hist : Iic n → ℝ × ℝ) : Measure ℝ :=
     x := x + y
   return x
 
-example {n : ℕ} (_hist : Iic n → ℝ × ℝ) : IsProbabilityMeasure (iter μ _hist) := by
+instance (n : ℕ) : IsMarkov (iter (n := n) μ) := by
   unfold iter
-  simp
-  sorry
+  refine IsMarkov.mBind ?_ ?_
+  · -- la boucle : collection fixe `List.range n`, état initial constant `0`
+    refine IsMarkov.forInList _ (fun _a => ?_) (by fun_prop)
+    -- le corps, à élément `_a` fixé : `let y ← μ`
+    refine IsMarkov.mBind (IsMarkov.const μ) ?_
+    -- la mise à jour `x := x + y`, c.-à-d. `return (yield (x + y))`
+    exact IsMarkov.mPure_comp (by fun_prop)
+  · -- la continuation finale : `return x`
+    exact IsMarkov.mPure_comp measurable_snd
 
-/- example : IsProbabilityMeasure (init μ) := by
+noncomputable def iter_kernel (n : ℕ) : Kernel (Iic n → ℝ × ℝ) ℝ :=
+  IsMarkov.toKernel (iter (n := n) μ)
+
+instance (n : ℕ) : IsMarkovKernel (iter_kernel μ n) := by
+  unfold iter_kernel
+  infer_instance
+
+example : IsProbabilityMeasure (init μ) := by
   unfold init
-  simp only [mPure_def, mBind_def]
-  refine ⟨?_⟩
-  rw [Measure.bind_apply (MeasurableSet.univ)]
-  · have hker : ∀ x : ℝ, Measurable fun y ↦ dirac (x + y) := by
-      intro x
-      exact measurable_dirac.comp <| measurable_const_add x
-    simp_rw [Measure.bind_apply (MeasurableSet.univ) (hker _).aemeasurable]
-    simp
-  · apply Measurable.aemeasurable
-    refine Measure.measurable_of_measurable_coe _ fun s hs ↦ ?_
-    have hker : ∀ x : ℝ, Measurable fun y : ℝ ↦ (dirac (x + y) : Measure ℝ) := fun x =>
-      measurable_dirac.comp (measurable_const_add x)
-    simp_rw [Measure.bind_apply hs (hker _).aemeasurable, dirac_apply' _ hs]
-    exact ((measurable_one.indicator hs).comp measurable_add).lintegral_prod_right' -/
+  is_markov
+
+/- Ce que `is_markov` fait à la main, sur `init` : le programme est un `mBind`, donc il suffit de
+savoir que `μ` est une proba et que la continuation est un noyau markovien. -/
+example : IsProbabilityMeasure (init μ) :=
+  isProbabilityMeasure_mBind <|
+    (IsMarkov.const (γ := ℝ) μ).mBind (IsMarkov.mPure_comp (by fun_prop))
+
+example : IsProbabilityMeasure (init μ) := by
+  apply isProbabilityMeasure_mBind
+  refine IsMarkov.mBind ?_ ?_
+  · exact IsMarkov.const μ
+  · exact IsMarkov.mPure_comp
