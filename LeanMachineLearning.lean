@@ -57,7 +57,6 @@ public import LeanMachineLearning.Tactic.EqLift.Tactic.Utils
 public import LeanMachineLearning.Tactic.KernelHom
 public import LeanMachineLearning.Tactic.KernelHom.ForMathlib.Kernel
 public import LeanMachineLearning.Tactic.KernelHom.ForMathlib.LIntegral
-public import LeanMachineLearning.Tactic.KernelHom.ForMathlib.MeasurableEquiv
 public import LeanMachineLearning.Tactic.KernelHom.Kernel.Hom
 public import LeanMachineLearning.Tactic.KernelHom.Kernel.MonoidalComp
 public import LeanMachineLearning.Tactic.KernelHom.Tactic.Delaborators

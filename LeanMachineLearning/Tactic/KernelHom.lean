@@ -8,7 +8,6 @@ module  -- shake: keep-all --deprecated_module: ignore
 
 public import LeanMachineLearning.Tactic.KernelHom.ForMathlib.Kernel
 public import LeanMachineLearning.Tactic.KernelHom.ForMathlib.LIntegral
-public import LeanMachineLearning.Tactic.KernelHom.ForMathlib.MeasurableEquiv
 public import LeanMachineLearning.Tactic.KernelHom.Kernel.Hom
 public import LeanMachineLearning.Tactic.KernelHom.Kernel.MonoidalComp
 public import LeanMachineLearning.Tactic.KernelHom.Tactic.Delaborators
