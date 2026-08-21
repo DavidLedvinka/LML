@@ -104,7 +104,8 @@ noncomputable def test_ite : Measure ℝ := rdo
 example : IsProbabilityMeasure (test_ite μ) := by
   is_markov
 
-/- variable (s : Set ℝ) (ν : s → Measure ℝ) (ν' : (sᶜ : Set ℝ) → Measure ℝ)
+variable (s : Set ℝ) {hs : MeasurableSet s} (ν : Kernel s ℝ) (ν' : Kernel (sᶜ : Set ℝ) ℝ)
+  [IsMarkovKernel ν] [IsMarkovKernel ν']
 
 open Classical in
 noncomputable def depBranch : Measure ℝ := rdo
@@ -116,7 +117,8 @@ noncomputable def depBranch : Measure ℝ := rdo
     let y ← ν' ⟨x, hx⟩
     return y
 
+open Classical in
 example : IsProbabilityMeasure (depBranch μ s ν ν') := by
-  is_markov -/
+  is_markov
 
 end RDo.Examples

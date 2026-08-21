@@ -98,4 +98,22 @@ theorem dite {p : γ' → γ} (hp : Measurable p) {s : Set γ} (hs : MeasurableS
     · simpa [h] using hκ.isProbabilityMeasure _
     · simpa [h] using hη.isProbabilityMeasure _
 
+/-- The form of `RDo.IsMarkov.dite` an `rdo` program actually produces.
+
+`if h : p c then … else …` elaborates to branches indexed by the *proof* `h`, not by an element
+of a subtype. Passing from one to the other — `κ ⟨c, h⟩` against `κ' c h` — is a higher-order
+problem `apply` does not solve, which is why the tactic builds this application itself, from the
+pieces `RDo.Tactic.shapeOf` extracted.
+
+Stating the side condition as `Measurable p` rather than `MeasurableSet {c | p c}` keeps it
+within reach of `fun_prop`; `Measurable.setOf` bridges the two, once, here. -/
+theorem diteP {p : γ → Prop} [inst : DecidablePred p] (hp : Measurable p)
+    {κ : {c // p c} → Measure α} (hκ : IsMarkov κ)
+    {η : {c // ¬ p c} → Measure α} (hη : IsMarkov η) :
+    IsMarkov fun c ↦ if h : p c then κ ⟨c, h⟩ else η ⟨c, h⟩ := by
+  refine ⟨.dite (s := {c | p c}) hκ.measurable hη.measurable hp.setOf, fun c ↦ ?_⟩
+  by_cases h : p c
+  · simpa [h] using hκ.isProbabilityMeasure _
+  · simpa [h] using hη.isProbabilityMeasure _
+
 end RDo.IsMarkov

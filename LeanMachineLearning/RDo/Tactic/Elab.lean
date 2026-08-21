@@ -53,9 +53,10 @@ inductive Shape
   | comp
   /-- `fun c ↦ if p c then κ c else η c`: a if-then-else over two families of measures. -/
   | ite
-  /--`fun c ↦ if hx : x ∈ s then κ ⟨x, hx⟩ else η ⟨x, hx⟩`: a dependent if-then-else over two
-  families of measures. -/
-  | dite
+  /-- `fun c ↦ if h : p c then κ c h else η c h`: a dependent if-then-else. The condition and the
+  two branches are carried along, abstracted over the parameter, because `apply` cannot recover
+  them: the branches take the proof, whereas the lemma indexes them by a subtype. -/
+  | dite (p tb fb : Expr)
   /-- Anything else: a fixed distribution, a program the tactic was not taught about. These are
   the leaves of the recursion. -/
   | leaf
@@ -82,7 +83,11 @@ def shapeOf (κ : Expr) : MetaM Shape := do
     else if head.isConstOf ``ite then
       return .ite
     else if head.isConstOf ``dite then
-      return .dite
+      -- `dite` takes five arguments: the type, the condition, the `Decidable` instance, and the
+      -- two branches. Only the last four matter, abstracted over `c`.
+      let args := body.getAppArgs
+      return .dite (← mkLambdaFVars #[c] args[1]!) (← mkLambdaFVars #[c] args[3]!)
+        (← mkLambdaFVars #[c] args[4]!)
     else if body.isApp
       && !body.appFn!.containsFVar c.fvarId!
       && body.appArg!.containsFVar c.fvarId!
@@ -188,17 +193,27 @@ partial def isMarkovCore (g : MVarId) (fuel : Nat) : MetaM (List MVarId) := do
       return goals
     | _ =>
       throwError "is_markov: expected at least one goal after the `ite` step, got {gs.length}"
-  | .dite =>
-    let gs ← g.applyConst ``RDo.IsMarkov.dite
-    logInfo m!"goals after dite: {gs}"
-    match gs with
-    | hd :: hd' :: tl =>
-      let mut goals := [hd, hd']
-      for g' in tl do
-        goals := goals ++ (← isMarkovCore g' fuel)
-      return goals
-    | _ =>
-      throwError "is_markov: expected at least two goals after the `dite` step, got {gs.length}"
+  | .dite p tb fb =>
+    /- `if h : p c then tb c h else fb c h`. The lemma indexes its branches by the subtypes
+    `{c // p c}` and `{c // ¬ p c}`, so we reassociate the two branches into that form here —
+    `κ x = tb x.1 x.2` — and build the application ourselves. -/
+    let dom := (← inferType p).bindingDomain!
+    let notP ← withLocalDeclD `c dom fun c => do
+      mkLambdaFVars #[c] (← mkAppM ``Not #[(p.beta #[c])])
+    let bundle (branch pred : Expr) : MetaM Expr := do
+      let subtype ← mkAppM ``Subtype #[pred]
+      withLocalDeclD `x subtype fun x => do
+        let v ← mkAppM ``Subtype.val #[x]
+        let h ← mkAppM ``Subtype.property #[x]
+        mkLambdaFVars #[x] (mkApp2 branch v h).headBeta
+    let hp ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``Measurable #[p])
+    let hκ ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``RDo.IsMarkov #[← bundle tb p])
+    let hη ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``RDo.IsMarkov #[← bundle fb notP])
+    let proof ← mkAppM ``RDo.IsMarkov.diteP #[hp, hκ, hη]
+    unless ← isDefEq (← g.getType) (← inferType proof) do
+      throwError "is_markov: the `dite` step does not match the goal{indentExpr (← g.getType)}"
+    g.assign proof
+    return (← isMarkovCore hκ.mvarId! fuel) ++ (← isMarkovCore hη.mvarId! fuel) ++ [hp.mvarId!]
   | .leaf =>
     /- A leaf: either something already known — a fixed distribution, a hypothesis, a program
     with its own `IsMarkov` instance — or a definition still to be looked through. Closing comes
