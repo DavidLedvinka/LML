@@ -5,7 +5,7 @@ Authors: David Ledvinka
 -/
 module
 
-public import LeanMachineLearning.RDo.MeasurableSpaceMonad
+public import LeanMachineLearning.RDo.Monad.MeasurableSpace
 public meta import Lean.Meta.ProdN
 
 /-!

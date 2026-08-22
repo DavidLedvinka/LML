@@ -5,7 +5,7 @@ Authors: David Ledvinka
 -/
 module
 
-public import LeanMachineLearning.RDo.RDo
+public import LeanMachineLearning.RDo.Monad.Notation
 
 /-!
 # Instances for `MeasurableSpaceForIn`

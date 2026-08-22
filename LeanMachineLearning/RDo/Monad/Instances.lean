@@ -5,7 +5,7 @@ Authors: David Ledvinka
 -/
 module
 
-public import LeanMachineLearning.RDo.MeasurableSpaceMonad
+public import LeanMachineLearning.RDo.Monad.MeasurableSpace
 public import Mathlib.Probability.ProductMeasure
 
 /-!

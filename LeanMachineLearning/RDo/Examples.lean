@@ -1,7 +1,8 @@
 module
 
-public import LeanMachineLearning.RDo.MonadInstances
-public import LeanMachineLearning.RDo.ForInInstances
+public import LeanMachineLearning.RDo.Monad.Instances
+public import LeanMachineLearning.RDo.Monad.ForInInstances
+public import LeanMachineLearning.RDo.Tactic.Elab
 public import Mathlib.Probability.Distributions.Bernoulli
 public import Mathlib.Algebra.Ring.BooleanRing
 
@@ -19,6 +20,9 @@ noncomputable def measureSample : Measure Bool := rdo
   let x ← bernoulliMeasure true false ⟨(1 : ℝ) / 2, by norm_num⟩
   let y ← bernoulliMeasure true false ⟨(1 : ℝ) / 2, by norm_num⟩
   return x + y
+
+instance : IsProbabilityMeasure measureSample := by
+  is_markov
 
 def pseudoSample : Rand Bool := do
   let x ← Random.randBool
