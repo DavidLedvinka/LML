@@ -50,4 +50,7 @@ instance (κ : γ → Measure α) [IsMarkov κ] : IsMarkovKernel (IsMarkov.toKer
   refine ⟨fun s ↦ ?_⟩
   simpa [IsMarkov.toKernel] using IsMarkov.isProbabilityMeasure s
 
+lemma IsMarkov.congr {κ η : γ → Measure α} [hη : IsMarkov η] (h : ∀ c, κ c = η c) : IsMarkov κ :=
+  funext h ▸ hη
+
 end

@@ -33,6 +33,7 @@ inductive Shape
   two branches are carried along, abstracted over the parameter, because `apply` cannot recover
   them: the branches take the proof, whereas the lemma indexes them by a subtype. -/
   | dite (p tb fb : Expr)
+  | forIn
   /-- Anything else: a fixed distribution, a program the tactic was not taught about. These are
   the leaves of the recursion. -/
   | leaf
@@ -68,6 +69,8 @@ def shapeOf (κ : Expr) : MetaM Shape := do
       program that was not a lambda to begin with. Without it, `IsMarkov ⇑κ` would be read as a
       reparametrisation of itself by the identity, and the recursion below would never end. -/
       return .comp
+    else if head.isConstOf ``MeasurableSpaceForIn.forIn then
+      return .forIn
     else
       return .leaf
 
@@ -146,11 +149,11 @@ partial def isMarkovCore (g : MVarId) (fuel : Nat) : MetaM (List MVarId) := do
     `{c // p c}` and `{c // ¬ p c}`, so we reassociate the two branches into that form here
     (`κ x = tb x.1 x.2`) and build the application ourselves. -/
     let dom := (← inferType p).bindingDomain!
-    let notP ← withLocalDeclD `c dom fun c => do
+    let notP ← withLocalDeclD `c dom fun c ↦ do
       mkLambdaFVars #[c] (← mkAppM ``Not #[(p.beta #[c])])
     let bundle (branch pred : Expr) : MetaM Expr := do
       let subtype ← mkAppM ``Subtype #[pred]
-      withLocalDeclD `x subtype fun x => do
+      withLocalDeclD `x subtype fun x ↦ do
         let v ← mkAppM ``Subtype.val #[x]
         let h ← mkAppM ``Subtype.property #[x]
         mkLambdaFVars #[x] (mkApp2 branch v h).headBeta
@@ -163,6 +166,19 @@ partial def isMarkovCore (g : MVarId) (fuel : Nat) : MetaM (List MVarId) := do
       throwError "is_markov: the `dite` step does not match the goal {indentExpr (← g.getType)}"
     g.assign proof
     return (← isMarkovCore hκ.mvarId! fuel) ++ (← isMarkovCore hη.mvarId! fuel) ++ [hp.mvarId!]
+  | .forIn =>
+    let gs ← g.applyConst ``IsMarkov.forInList
+    match gs with
+    | [g_measurable, g_is_markov] =>
+      let is_markov_type ← instantiateMVars (← g_is_markov.getType)
+      let dom := is_markov_type.bindingDomain!
+      let t : MVarId ← withLocalDeclD `x dom fun x ↦ do
+        let test := mkApp is_markov_type x
+        logInfo m!"forIn test: {← inferType test}"
+        return g_is_markov
+      return (← isMarkovCore g_is_markov fuel) ++ [g_measurable]
+    | _ =>
+      throwError "is_markov: expected two goals after the `forIn` step, got {gs.length}"
   | .leaf =>
     /- A leaf: either something already known — a fixed distribution, a hypothesis, a program
     with its own `IsMarkov` instance — or a definition still to be looked through. Closing comes

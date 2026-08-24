@@ -6,7 +6,8 @@ Authors: Gaëtan Serré
 module
 
 public import LeanMachineLearning.RDo.Monad.Instances
-public import LeanMachineLearning.RDo.Tactic.IsMarkov
+public import LeanMachineLearning.RDo.Monad.ForInInstances
+public import LeanMachineLearning.RDo.Tactic.ForInStep
 public import Mathlib.MeasureTheory.Measure.ProbabilityMeasure
 
 /-!
@@ -40,7 +41,7 @@ based on a measurable predicate `p` is Markovian in the parameter.
 open MeasureTheory ProbabilityTheory Function
 open MeasurableSpacePure
 
-namespace RDo.IsMarkov
+namespace IsMarkov
 
 universe u
 
@@ -53,8 +54,9 @@ lemma mPure_comp {g : γ → α} (hg : Measurable g) : IsMarkov fun c ↦ (mPure
     simp only [mPure_def]
     infer_instance
 
-lemma _root_.RDo.measurable_bind {κ : γ → Measure α} (hκ : IsMarkov κ) {η : γ → α → Measure β}
-    (hη : Measurable (uncurry η)) : Measurable fun c ↦ (κ c).bind (η c) := by
+private lemma measurable_bind {κ : γ → Measure α} (hκ : IsMarkov κ)
+    {η : γ → α → Measure β} (hη : Measurable (uncurry η)) :
+    Measurable fun c ↦ (κ c).bind (η c) := by
   let κ' : Kernel γ α := hκ.toKernel
   refine Measure.measurable_of_measurable_coe _ fun s hs ↦ ?_
   have hηc : ∀ c, Measurable (η c) := by
@@ -94,4 +96,40 @@ lemma dite {p : γ → Prop} [inst : DecidablePred p] (hp : Measurable p)
   · simpa [h] using hκ.isProbabilityMeasure _
   · simpa [h] using hη.isProbabilityMeasure _
 
-end RDo.IsMarkov
+omit [MeasurableSpace γ] in
+private lemma list_loop {as : List γ}
+    {f : α → (a : γ) → a ∈ as → γ' → Measure (ForInStep γ')}
+    (hf : ∀ a h, IsMarkov fun p : α × γ' => f p.1 a h p.2) :
+    ∀ as' (h : ∃ bs, bs ++ as' = as),
+      IsMarkov fun p : α × γ' ↦ List.measurableSpaceForIn'.loop as (f p.1) as' p.2 h := by
+  intro as'
+  induction as' with
+  | nil =>
+    intro h
+    simpa only [List.measurableSpaceForIn'.loop.eq_1] using
+      IsMarkov.mPure_comp (g := fun p : α × γ' => p.2) measurable_snd
+  | cons a as' ih =>
+    intro h
+    obtain ⟨bs, rfl⟩ := h
+    have h' : ∃ bs', bs' ++ as' = bs ++ a :: as' := ⟨bs ++ [a], by simp⟩
+    simp only [List.measurableSpaceForIn'.loop.eq_2]
+    refine IsMarkov.mBind ?_ ?_
+    · exact hf a List.mem_append_cons_self
+    · have := IsMarkov.forInStepCasesOn
+        (done := fun (_ : α × γ') (b : γ') ↦ (mPure b : Measure γ'))
+        (yield := fun (p : α × γ') (b : γ') ↦
+          List.measurableSpaceForIn'.loop (bs ++ a :: as') (f p.1) as' b h')
+        (IsMarkov.mPure_comp measurable_snd)
+        ((ih h').comp (g := fun r : (α × γ') × γ' ↦ (r.1.1, r.2)) (by fun_prop))
+      refine IsMarkov.congr (hη := this) fun (q, s) ↦ ?_
+      cases s <;> rfl
+
+omit [MeasurableSpace γ] in
+lemma forInList {as : List γ} {b : α → γ'} {f : α → γ → γ' → Measure (ForInStep γ')}
+    (hb : Measurable b) (hf : ∀ a, IsMarkov fun p : α × γ' => f p.1 a p.2) :
+    IsMarkov fun c => MeasurableSpaceForIn.forIn (m := Measure) as (b c) (f c) :=
+  (list_loop (f := fun c a _ s ↦ f c a s) (fun a _ ↦ hf a) as ⟨[], rfl⟩).comp
+    (g := fun c ↦ (c, b c)) (measurable_id.prodMk hb)
+
+
+end IsMarkov
