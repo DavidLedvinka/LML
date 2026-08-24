@@ -126,9 +126,9 @@ private lemma list_loop {as : List γ}
 
 omit [MeasurableSpace γ] in
 lemma forInList {as : List γ} {b : α → γ'} {f : α → γ → γ' → Measure (ForInStep γ')}
-    (hb : Measurable b) (hf : ∀ a, IsMarkov fun p : α × γ' => f p.1 a p.2) :
+    (hb : Measurable b) (hf : ∀ a ∈ as, IsMarkov fun p : α × γ' => f p.1 a p.2) :
     IsMarkov fun c => MeasurableSpaceForIn.forIn (m := Measure) as (b c) (f c) :=
-  (list_loop (f := fun c a _ s ↦ f c a s) (fun a _ ↦ hf a) as ⟨[], rfl⟩).comp
+  (list_loop (f := fun c a _ s ↦ f c a s) hf as ⟨[], rfl⟩).comp
     (g := fun c ↦ (c, b c)) (measurable_id.prodMk hb)
 
 

@@ -60,18 +60,32 @@ def sampleBitsArray [HasBit m] (n : ℕ) : m (Array Bool) := rdo
     xs := xs.push b
   return xs
 
-variable (μ : Measure ℝ) [IsProbabilityMeasure μ]
+variable (μ : Measure ℝ) (as : List ℝ) [IsProbabilityMeasure μ]
+
+def tt := μ
 
 noncomputable
-def test : Measure ℝ := rdo
-  let mut x ← μ
-  for _ in List.range 10 rdo
-    let y ← μ
+def test (c : ℝ) : Measure ℝ := rdo
+  let mut x ← (tt μ)
+  for i in as rdo
+    let y ← (tt μ)
+    x := x + y + i + c
+  return x
+
+example : IsMarkov (test μ as) := by
+  is_markov
+
+variable (νs : List (Measure ℝ)) (h : ∀ ν ∈ νs, IsProbabilityMeasure ν)
+
+noncomputable
+def test2 : Measure ℝ := rdo
+  let mut x := 0
+  for w in νs rdo
+    let y ← w
     x := x + y
   return x
 
-example : IsProbabilityMeasure (test μ) := by
+example : IsProbabilityMeasure (test2 νs) := by
   is_markov
-  sorry
 
 end

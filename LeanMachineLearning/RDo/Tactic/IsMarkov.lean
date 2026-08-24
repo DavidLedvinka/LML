@@ -41,6 +41,9 @@ instance (κ : Kernel γ α) [IsMarkovKernel κ] : IsMarkov κ :=
 instance (μ : Measure α) [IsProbabilityMeasure μ] : IsMarkov fun _ : γ ↦ μ :=
   ⟨measurable_const, fun _ ↦ ‹_›⟩
 
+lemma IsMarkov.const {μ : Measure α} (h : IsProbabilityMeasure μ) : IsMarkov fun _ : γ ↦ μ :=
+  ⟨measurable_const, fun _ ↦ h⟩
+
 /-- A family of measures `κ : γ → Measure α` endowed with `IsMarkov` is also a `Kernel` endowed
 with `IsMarkovKernel`. -/
 def IsMarkov.toKernel (κ : γ → Measure α) [IsMarkov κ] : Kernel γ α :=
