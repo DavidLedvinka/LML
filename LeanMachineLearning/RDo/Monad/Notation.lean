@@ -156,7 +156,6 @@ def rdoForDecl := leading_parser
   let xs ← Term.elabTermEnsuringType xs ρ
   let mi := (← read).monadInfo
   let mutVars := (← read).mutVars
-
   let info ← inferControlInfoSeq body
   let oldReturnCont ← getReturnCont
   let returnVarName ← mkFreshUserName `__r
@@ -191,9 +190,7 @@ def rdoForDecl := leading_parser
     if info.returnsEarly && loopMutVars.isEmpty then
       defs := defs.push (mkConst ``Unit.unit)
     return defs
-
   let (preS, σ) ← mkProdMkN (← useLoopMutVars none) mi.u
-
   let mσ ← Term.mkInstMVar <| mkApp (mkConst ``MeasurableSpace [mi.u]) σ
   let (app, p?) ← match h? with
     | none =>
@@ -216,7 +213,6 @@ def rdoForDecl := leading_parser
         (h.getId, fun x => pure (mkApp5 (mkConst ``Membership.mem [uα, uρ]) α ρ d xs x[0]!))]
     | _, _ =>
       #[(x.getId, fun _ => pure α)]
-
   let body ←
     withLocalDeclsD xh fun xh => do
     Term.addLocalVarInfo x xh[0]!
@@ -243,9 +239,7 @@ def rdoForDecl := leading_parser
     enterLoopBody breakCont continueCont returnCont do
     -- Elaborate the loop body, which must have result type `PUnit`, just like the whole `for` loop.
     elabDoSeq body { dec with k := continueCont, kind := .duplicable }
-
   let forIn := mkApp app body
-
   let γ := (← read).doBlockResultType
   let rest ←
     withLocalDeclD s σ fun postS => do mkLambdaFVars #[postS] <| ← do
@@ -253,16 +247,16 @@ def rdoForDecl := leading_parser
         if info.returnsEarly then
           let ret ← getFVarFromUserName returnVarName
           let ret ← if loopMutVars.isEmpty then mkAppM ``Prod.fst #[ret] else pure ret
-          let motive := mkLambda `_ .default (← inferType ret) (← mkMonadApp γ)
-          let app := mkApp3 (mkConst ``Break.runK.match_1 [mi.u, mi.v.succ])
-            oldReturnCont.resultType motive ret
+          /- Both branches produce an `m γ`, so the motive is constant and the matcher generated
+          for `Break.runK` is not needed: `Break.runK` itself is that case analysis. Note that it
+          takes the `none` branch first, the other way round from the matcher. -/
           let none := mkSimpleThunk (← dec.continueWithUnit)
           let some ← withLocalDeclD (← mkFreshUserName `r) oldReturnCont.resultType fun r => do
             mkLambdaFVars #[r] (← oldReturnCont.k r)
-          return mkApp2 app some none
+          return mkAppN (mkConst ``Break.runK [mi.u, mi.v])
+            #[oldReturnCont.resultType, ← mkMonadApp γ, ret, none, some]
         else
           dec.continueWithUnit
-
   mkBindApp σ γ forIn rest
 
 end LoopElab
