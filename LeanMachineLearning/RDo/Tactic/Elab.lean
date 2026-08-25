@@ -33,8 +33,10 @@ inductive Shape
   two branches are carried along, abstracted over the parameter, because `apply` cannot recover
   them: the branches take the proof, whereas the lemma indexes them by a subtype. -/
   | dite (p tb fb : Expr)
-  /-- `for a in as rdo body`: a `for` loop over a list. -/
-  | forIn
+  /-- `for a in as rdo body`: a `for` loop over a collection. The two lemmas to try are carried
+  along, one for a fixed collection and one for a collection read off the parameter, so that the
+  three collections `rdo` supports share a single branch below. -/
+  | forIn (fixed varying : Name)
   /-- `fun _ ↦ μ`: a family that does not look at its parameter at all. -/
   | const
   /-- Anything else: a fixed distribution, a program the tactic was not taught about. These are
@@ -73,7 +75,11 @@ def shapeOf (κ : Expr) : MetaM Shape := do
       reparametrisation of itself by the identity, and the recursion below would never end. -/
       return .comp
     else if head.isConstOf ``MeasurableSpaceForIn.forIn then
-      return .forIn
+      match body.getAppArgs[1]!.getAppFn with
+      | .const ``List _ => return .forIn ``IsMarkov.forInList ``IsMarkov.forInList_comp
+      | .const ``Array _ => return .forIn ``IsMarkov.forInArray ``IsMarkov.forInArray_comp
+      | .const ``Vector _ => return .forIn ``IsMarkov.forInVector ``IsMarkov.forInVector_comp
+      | _ => return .leaf
     else if !body.containsFVar c.fvarId! then
       return .const
     else
@@ -180,22 +186,32 @@ partial def isMarkovCore (g : MVarId) (fuel : Nat) : MetaM (List MVarId) := g.wi
       throwError "is_markov: the `dite` step does not match the goal {indentExpr (← g.getType)}"
     g.assign proof
     return (← isMarkovCore hκ.mvarId! fuel) ++ (← isMarkovCore hη.mvarId! fuel) ++ [hp.mvarId!]
-  | .forIn =>
-    /- `for a in as rdo body`: two hypotheses, a measurability goal for the initial value and
-    `∀ a, IsMarkov fun p ↦ body p.1 a p.2` for the body of the loop. Walking through the body needs
-    the element of the list in the local context, so it is introduced, then abstracted away again
-    from whatever the recursion did not close: the user is handed `∀ a, …` goals rather than a
-    variable we would have named on their behalf. -/
-    let gs ← g.applyConst ``IsMarkov.forInList
-    match gs with
-    | [g_measurable, g_is_markov] =>
-      -- `∀ a ∈ as, IsMarkov …`: the element of the list, then the proof that it belongs to it.
-      let (i, g_body) ← g_is_markov.intro1P
-      let (h, g_body) ← g_body.intro1P
-      let goals ← isMarkovCore g_body fuel
-      return (← goals.mapM (abstractLoopVars #[i, h])) ++ [g_measurable]
-    | _ =>
-      throwError "is_markov: expected two goals after the `forIn` step, got {gs.length}"
+  | .forIn fixed varying =>
+    if let some gs ← observing? (g.applyConst fixed) then
+      /- Fixed collection: a measurability goal for the initial value, and
+      `∀ a ∈ as, IsMarkov fun p ↦ body p.1 a p.2` for the body. Walking through the body needs the
+      element in the local context, so it is introduced, then abstracted away again from whatever
+      the recursion did not close. -/
+      match gs with
+      | [g_measurable, g_is_markov] =>
+        let (i, g_body) ← g_is_markov.intro1P
+        let (h, g_body) ← g_body.intro1P
+        return (← (← isMarkovCore g_body fuel).mapM (abstractLoopVars #[i, h])) ++ [g_measurable]
+      | _ =>
+        throwError "is_markov: expected two goals after the `forIn` step, got {gs.length}"
+    else if let some gs ← observing? (g.applyConst varying) then
+      /- Collection read off the parameter: the body is Markovian jointly in the element, so there
+      is no element to introduce. The measurability goals are left to the user. -/
+      let mut goals := []
+      let mut side := []
+      for g' in gs do
+        if (← instantiateMVars (← g'.getType)).isAppOfArity ``IsMarkov 5 then
+          goals := goals ++ (← isMarkovCore g' fuel)
+        else
+          side := side ++ [g']
+      return goals ++ side
+    else
+      return [g]
   | .leaf | .const =>
     /- A leaf: either something already known — a fixed distribution, a hypothesis, a program
     with its own `IsMarkov` instance — or a definition still to be looked through, or a constant

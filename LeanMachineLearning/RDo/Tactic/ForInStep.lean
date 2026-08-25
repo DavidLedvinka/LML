@@ -9,6 +9,26 @@ public import LeanMachineLearning.RDo.Tactic.IsMarkov
 public import LeanMachineLearning.RDo.Monad.MeasurableSpace
 
 /-!
+# Measurability of `ForInStep`
+
+The body of a `for` loop in an `rdo`-block returns a `ForInStep β`: `yield b` to carry on with `b`
+as the new state, `done b` to stop the loop there. Carrying measurability, and then the Markov
+property, through a loop therefore means carrying them through that type, whose σ-algebra is the
+largest one making both `ForInStep.yield` and `ForInStep.done` measurable.
+
+This file collects what the `is_markov` tactic needs about it. The last two results are the ones an
+iteration of a loop goes through: they turn the case analysis performed on the value returned by the
+body into its two branches.
+
+## Main definitions
+* `ForInStep.isDone`: whether a `ForInStep` stops the loop or carries on with it.
+
+## Main results
+* `measurable_yield`, `measurable_run`, `measurable_isDone`: the maps relating `ForInStep β` to `β`
+  and to `Bool` are measurable.
+* `measurable_CasesOn`: a case analysis on a `ForInStep`, measurable in each of its two branches, is
+  measurable.
+* `IsMarkov.forInStepCasesOn`: the same statement for the Markov property.
 -/
 
 @[expose] public section
@@ -19,6 +39,7 @@ namespace ForInStep
 
 variable {β : Type*}
 
+/-- Whether a `ForInStep` stops the loop it is the result of, or carries on with it. -/
 def isDone : ForInStep β → Bool
   | .done _ => true
   | .yield _ => false
@@ -29,7 +50,7 @@ lemma isDone_done (b : β) : (ForInStep.done b).isDone = true := rfl
 @[simp]
 lemma isDone_yield (b : β) : (ForInStep.yield b).isDone = false := rfl
 
-variable {α β γ : Type*} [MeasurableSpace α] [MeasurableSpace β] [MeasurableSpace γ]
+variable {α γ : Type*} [MeasurableSpace α] [MeasurableSpace β] [MeasurableSpace γ]
 
 @[fun_prop]
 lemma measurable_yield : Measurable (ForInStep.yield : β → ForInStep β) := fun _ hs => hs.1
