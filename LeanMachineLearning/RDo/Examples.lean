@@ -3,8 +3,9 @@ module
 public import LeanMachineLearning.RDo.Monad.Instances
 public import LeanMachineLearning.RDo.Monad.ForInInstances
 public import LeanMachineLearning.RDo.Tactic.Elab
-public import Mathlib.Probability.Distributions.Bernoulli
-public import Mathlib.Algebra.Ring.BooleanRing
+public import LeanMachineLearning.ForMathlib.MeasureTheory.Order.MeasurableArg
+public import LeanMachineLearning.SequentialLearning.Algorithm
+public import Mathlib
 
 set_option linter.style.header false
 
@@ -62,7 +63,7 @@ def sampleBitsArray [HasBit m] (n : ℕ) : m (Array Bool) := rdo
 
 variable (μ : Measure ℝ) (as : List ℝ) [IsProbabilityMeasure μ]
 
-variable (n : ℕ) (f : Vector ℝ n → Vector ℝ n)
+variable (n : ℕ) (f : Vector ℝ n → Vector ℝ n) (hf : Measurable f)
 
 def tt := μ
 
@@ -88,5 +89,54 @@ def test2 : Measure ℝ := rdo
 
 example : IsProbabilityMeasure (test2 νs) := by
   is_markov
+
+
+/- # Thompson sampling -/
+
+/-- Gaussian Thompson sampling: rewards have known variance `1` and each arm has an independent
+`N(0, 1)` prior. `N j` is the posterior precision of arm `j` and `S j` its sum of rewards, so
+`θ j` is sampled from the posterior `N(S j / N j, 1 / N j)`. The argmax is played. -/
+noncomputable def thompson {K n : ℕ} (hK : 0 < K) (history : Vector (Fin K × ℝ) n) :
+    Measure (Fin K) := rdo
+  let mut N : Fin K → ℝ := fun _ ↦ 1
+  let mut S : Fin K → ℝ := fun _ ↦ 0
+  for (a, r) in history rdo
+    N := fun j ↦ if j = a then N j + 1 else N j
+    S := fun j ↦ if j = a then S j + r else S j
+  let mut θ : Fin K → ℝ := fun _ ↦ 0
+  for j in List.finRange K rdo
+    let z ← gaussianReal (S j / N j) (Real.toNNReal (1 / N j))
+    θ := fun k ↦ if k = j then z else θ k
+  have : Nonempty (Fin K) := Fin.pos_iff_nonempty.mp hK
+  return argmax θ
+
+variable {K n : ℕ} (hK : 0 < K)
+
+instance : IsMarkov (thompson (n := n) hK) := by
+  is_markov
+  · refine ForInStep.measurable_yield.comp ?_
+    refine Measurable.prodMk ?_ ?_
+    · refine measurable_pi_lambda _ fun k ↦ ?_
+      refine Measurable.ite (by measurability) ?_ ?_
+      · fun_prop
+      · fun_prop
+    · refine measurable_pi_lambda _ fun k ↦ ?_
+      refine Measurable.ite (by measurability) ?_ ?_
+      · fun_prop
+      · fun_prop
+  · intro i hi
+    refine ForInStep.measurable_yield.comp ?_
+    refine measurable_pi_lambda _ fun k ↦ ?_
+    refine Measurable.ite (by measurability) ?_ ?_
+    · fun_prop
+    · fun_prop
+
+instance : IsMarkovKernel <| IsMarkov.toKernel (thompson (n := n) hK) := inferInstance
+
+/- open Learning
+
+example : Algorithm (Fin K) ℝ where
+  policy n :=
+    (IsMarkov.toKernel (thompson (n := n) hK)).comap Vector.equivFn (by fun_prop) -/
 
 end

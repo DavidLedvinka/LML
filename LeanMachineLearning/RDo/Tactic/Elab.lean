@@ -66,6 +66,12 @@ def shapeOf (κ : Expr) : MetaM Shape := do
       let args := body.getAppArgs
       return .dite (← mkLambdaFVars #[c] args[1]!) (← mkLambdaFVars #[c] args[3]!)
         (← mkLambdaFVars #[c] args[4]!)
+    else if head.isConstOf ``MeasurableSpaceForIn.forIn then
+      match body.getAppArgs[1]!.getAppFn with
+      | .const ``List _ => return .forIn ``IsMarkov.forInList ``IsMarkov.forInList_comp
+      | .const ``Array _ => return .forIn ``IsMarkov.forInArray ``IsMarkov.forInArray_comp
+      | .const ``Vector _ => return .forIn ``IsMarkov.forInVector ``IsMarkov.forInVector_comp
+      | _ => return .leaf
     else if body.isApp
       && !body.appFn!.containsFVar c.fvarId!
       && body.appArg!.containsFVar c.fvarId!
@@ -74,12 +80,6 @@ def shapeOf (κ : Expr) : MetaM Shape := do
       program that was not a lambda to begin with. Without it, `IsMarkov ⇑κ` would be read as a
       reparametrisation of itself by the identity, and the recursion below would never end. -/
       return .comp
-    else if head.isConstOf ``MeasurableSpaceForIn.forIn then
-      match body.getAppArgs[1]!.getAppFn with
-      | .const ``List _ => return .forIn ``IsMarkov.forInList ``IsMarkov.forInList_comp
-      | .const ``Array _ => return .forIn ``IsMarkov.forInArray ``IsMarkov.forInArray_comp
-      | .const ``Vector _ => return .forIn ``IsMarkov.forInVector ``IsMarkov.forInVector_comp
-      | _ => return .leaf
     else if !body.containsFVar c.fvarId! then
       return .const
     else
@@ -93,6 +93,11 @@ def closeLeaf (g : MVarId) : MetaM (List MVarId) := do
     return []
   if ← g.assumptionCore then
     return []
+  /- A distribution whose parameters are read off the parameter of the kernel is not an instance.
+  Handing back its measurability side conditions stops the unfolding below from diving into the
+  definition of the distribution itself. -/
+  if let some gs ← observing? (g.applyConst ``IsMarkov.gaussianReal) then
+    return gs
   return [g]
 
 /-- The constant heading the body of `κ`, when it is a definition the tactic could look through. -/
@@ -218,7 +223,8 @@ partial def isMarkovCore (g : MVarId) (fuel : Nat) : MetaM (List MVarId) := g.wi
     family — a probability measure. The tactic tries to close the goal, and if it cannot, it looks
     through the definition, or ultimately hands the goal back to the user. -/
     let leftover ← closeLeaf g
-    if leftover.isEmpty then return []
+    -- `closeLeaf` may have proved the goal outright, or reduced it to side conditions.
+    if ← g.isAssigned then return leftover
     /- The goal was not closed, so we try to unfold names in the head of the program until we reach
     a known shape. If that fails, we leave the goal to the user. -/
     match ← unfoldToKnownShape (← instantiateMVars (← g.getType)) fuel with
