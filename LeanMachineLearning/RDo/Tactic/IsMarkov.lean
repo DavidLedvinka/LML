@@ -31,7 +31,7 @@ variable {γ α : Type*} [MeasurableSpace γ] [MeasurableSpace α]
 it is measurable, and every `κ c` is a probability measure. -/
 class IsMarkov (κ : γ → Measure α) : Prop where
   /-- A Markov kernel is measurable as a map into the Giry monad. -/
-  measurable : Measurable κ
+  measurable' : Measurable κ
   /-- A Markov kernel takes values in probability measures. -/
   isProbabilityMeasure (c : γ) : IsProbabilityMeasure (κ c)
 
@@ -41,19 +41,25 @@ instance (κ : Kernel γ α) [IsMarkovKernel κ] : IsMarkov κ :=
 instance (μ : Measure α) [IsProbabilityMeasure μ] : IsMarkov fun _ : γ ↦ μ :=
   ⟨measurable_const, fun _ ↦ ‹_›⟩
 
-lemma IsMarkov.const {μ : Measure α} (h : IsProbabilityMeasure μ) : IsMarkov fun _ : γ ↦ μ :=
+namespace IsMarkov
+
+@[fun_prop]
+lemma measurable {κ : γ → Measure α} [IsMarkov κ] : Measurable κ :=
+  IsMarkov.measurable'
+
+lemma const {μ : Measure α} (h : IsProbabilityMeasure μ) : IsMarkov fun _ : γ ↦ μ :=
   ⟨measurable_const, fun _ ↦ h⟩
 
 /-- A family of measures `κ : γ → Measure α` endowed with `IsMarkov` is also a `Kernel` endowed
 with `IsMarkovKernel`. -/
-def IsMarkov.toKernel (κ : γ → Measure α) [IsMarkov κ] : Kernel γ α :=
+def toKernel (κ : γ → Measure α) [IsMarkov κ] : Kernel γ α :=
   ⟨κ, IsMarkov.measurable⟩
 
 instance (κ : γ → Measure α) [IsMarkov κ] : IsMarkovKernel (IsMarkov.toKernel κ) := by
   refine ⟨fun s ↦ ?_⟩
   simpa [IsMarkov.toKernel] using IsMarkov.isProbabilityMeasure s
 
-lemma IsMarkov.congr {κ η : γ → Measure α} [hη : IsMarkov η] (h : ∀ c, κ c = η c) : IsMarkov κ :=
+lemma congr {κ η : γ → Measure α} [hη : IsMarkov η] (h : ∀ c, κ c = η c) : IsMarkov κ :=
   funext h ▸ hη
 
-end
+end IsMarkov

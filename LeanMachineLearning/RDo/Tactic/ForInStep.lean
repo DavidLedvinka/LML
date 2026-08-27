@@ -16,10 +16,6 @@ as the new state, `done b` to stop the loop there. Carrying measurability, and t
 property, through a loop therefore means carrying them through that type, whose σ-algebra is the
 largest one making both `ForInStep.yield` and `ForInStep.done` measurable.
 
-This file collects what the `is_markov` tactic needs about it. The last two results are the ones an
-iteration of a loop goes through: they turn the case analysis performed on the value returned by the
-body into its two branches.
-
 ## Main definitions
 * `ForInStep.isDone`: whether a `ForInStep` stops the loop or carries on with it.
 
@@ -92,7 +88,7 @@ lemma _root_.IsMarkov.forInStepCasesOn {done yield : α → γ → Measure β}
   (h_yield : IsMarkov fun p : α × γ ↦ yield p.1 p.2) :
   IsMarkov fun q : α × ForInStep γ ↦
     ForInStep.casesOn (motive := fun _ ↦ Measure β) q.2 (done q.1) (yield q.1) := by
-  refine ⟨measurable_CasesOn h_done.measurable h_yield.measurable, ?_⟩
+  refine ⟨by fun_prop, ?_⟩
   rintro ⟨c, s⟩
   cases s with
   | done b => exact h_done.isProbabilityMeasure (c, b)
