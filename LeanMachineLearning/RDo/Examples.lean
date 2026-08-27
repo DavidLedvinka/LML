@@ -1,9 +1,9 @@
 module
 
-public import LeanMachineLearning.RDo.Tactic.Elab
 public import LeanMachineLearning.ForMathlib.MeasureTheory.Order.MeasurableArg
+public import LeanMachineLearning.RDo.Tactic.Elab
 public import LeanMachineLearning.SequentialLearning.Algorithm
-public import Mathlib
+public import Mathlib.Topology.Separation.CompletelyRegular
 
 set_option linter.style.header false
 
