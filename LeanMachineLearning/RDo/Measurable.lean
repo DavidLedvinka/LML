@@ -11,19 +11,18 @@ public import Mathlib.MeasureTheory.MeasurableSpace.Prod
 public import Mathlib.Data.List.OfFn
 
 /-!
-# The measurable structure of lists, arrays and vectors
+# Results on the measurable structure of lists, arrays and vectors
 
-The σ-algebra of `List α`, defined in `LeanMachineLearning.RDo.Monad.ForInInstances`, is transported
-from `Σ n, Fin n → α`: it is the countable coproduct of the strata of lists of a fixed length.
+This file contains results on the measurable structure of lists, arrays and vectors.
 
 ## Main results
 
 * `List.measurableEquivSigmaTuple`: the identification above, as a measurable equivalence.
 * `measurableEmbedding_ofFn`: a stratum sits inside `List α` as a measurable embedding.
 * `measurable_cons`, `measurable_headD`: prepending an element to a list, and reading its head,
-are measurable.
+  are measurable.
 * `measurable_of_prodList`: a map out of `δ × List α` is measurable as soon as it is measurable on
-every stratum, which is how one reasons about a program taking a list as an argument.
+  every stratum, which is how one reasons about a program taking a list as an argument.
 -/
 
 @[expose] public section
@@ -116,5 +115,30 @@ def Vector.measurableEquivTuple {n : ℕ} : Vector α n ≃ᵐ (Fin n → α) wh
     ext
     simp
 
+instance : MeasurableSpace (Option α) := MeasurableSpace.map some inferInstance
+
+theorem measurableSet_option_iff {s : Set (Option α)} :
+    MeasurableSet s ↔ MeasurableSet (some ⁻¹' s) := Iff.rfl
+
+theorem measurable_option_iff {Y : Type*} [MeasurableSpace Y] {f : Option α → Y} :
+    Measurable f ↔ Measurable (f ∘ some) := Iff.rfl
+
+@[fun_prop]
+lemma measurable_some : Measurable (some : α → Option α) := fun _ hs ↦ hs
+
+lemma measurableEmbedding_some : MeasurableEmbedding (some : α → Option α) where
+  injective := Option.some_injective α
+  measurable := measurable_some
+  measurableSet_image' {t} ht := by
+    rw [measurableSet_option_iff, preimage_image_eq _ (Option.some_injective α)]
+    exact ht
+
+@[fun_prop]
+lemma measurable_isSome : Measurable (Option.isSome : Option α → Bool) :=
+  measurable_option_iff.2 measurable_const
+
+@[fun_prop]
+lemma measurable_getD (a : α) : Measurable (fun o : Option α ↦ o.getD a) :=
+  measurable_option_iff.2 measurable_id
 
 end

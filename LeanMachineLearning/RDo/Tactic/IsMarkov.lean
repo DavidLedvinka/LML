@@ -18,7 +18,7 @@ function is a Markov kernel, without first proving that it of type `Kernel`.
 ## Main definitions
 * `IsMarkov` states that the family of measures `κ : γ → Measure α` is a *Markov kernel*.
 * `IsMarkov.toKernel` states that a family of measures `κ : γ → Measure α` endowed with `IsMarkov`
-is also a `Kernel` endowed with `IsMarkovKernel`.
+  is also a `Kernel` endowed with `IsMarkovKernel`.
 -/
 
 @[expose] public section

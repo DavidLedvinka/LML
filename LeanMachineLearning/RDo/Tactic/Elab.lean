@@ -9,6 +9,17 @@ public import LeanMachineLearning.RDo.Tactic.Lemmas
 public meta import Lean.Elab.Tactic.Basic
 
 /-!
+# The `is_markov` tactic
+
+This file implements `is_markov`, which proves that an `rdo` program is a Markov kernel or, for a
+program taking no parameter, a probability measure.
+
+The tactic reads a program as a tree of `rdo` constructs. At each node it applies a lemma of
+`LeanMachineLearning.RDo.Tactic.Lemmas` propagating the Markov property through that construct, and
+recurses into the `IsMarkov` hypotheses that lemma leaves behind. The rest — the measurability side
+conditions the lemmas ask for, and the leaves the tactic was not taught about — is handed back to
+the user, after a last attempt by `fun_prop` and `assumption`. Definitions heading the program are
+looked through along the way, so `unfold` is not needed before `is_markov`.
 -/
 
 public meta section
@@ -37,12 +48,20 @@ inductive Shape
   along, one for a fixed collection and one for a collection read off the parameter, so that the
   three collections `rdo` supports share a single branch below. -/
   | forIn (fixed varying : Name)
+  /-- `Break.runK r (fun _ ↦ κ) η`: the case analysis an `rdo` block performs after a loop that
+  returns early. -/
+  | breakRunK
   /-- `fun _ ↦ μ`: a family that does not look at its parameter at all. -/
   | const
   /-- Anything else: a fixed distribution, a program the tactic was not taught about. These are
   the leaves of the recursion. -/
   | leaf
   --deriving Inhabited
+
+/-- `whnfR`, but stopping as soon as the head is `Break.runK`. That constant is an `abbrev`, hence
+reducible, so plain `whnfR` unfolds it into its matcher and the shape below is never recognised. -/
+def whnfRStopAtBreakRunK (e : Expr) : MetaM Expr :=
+  withReducible <| whnfHeadPred e fun e ↦ return !e.isAppOf ``Break.runK
 
 /-- Recognise the construct a family of measures `κ : γ → Measure α` is built from. -/
 def shapeOf (κ : Expr) : MetaM Shape := do
@@ -52,7 +71,7 @@ def shapeOf (κ : Expr) : MetaM Shape := do
     /- `etaExpand` rebuilds `κ` as `fun c ↦ (…) c`, so `body` is a beta-redex even when the
     original program was not an application. Normalising it once here is what makes the tests
     below look at the program itself rather than at that redex. -/
-    let body ← whnfR body
+    let body ← whnfRStopAtBreakRunK body
     let head := body.getAppFn
     if head.isConstOf ``MeasurableSpacePure.mPure then
       return .mPure
@@ -72,6 +91,8 @@ def shapeOf (κ : Expr) : MetaM Shape := do
       | .const ``Array _ => return .forIn ``IsMarkov.forInArray ``IsMarkov.forInArray_comp
       | .const ``Vector _ => return .forIn ``IsMarkov.forInVector ``IsMarkov.forInVector_comp
       | _ => return .leaf
+    else if head.isConstOf ``Break.runK then
+      return .breakRunK
     else if body.isApp
       && !body.appFn!.containsFVar c.fvarId!
       && body.appArg!.containsFVar c.fvarId!
@@ -217,6 +238,16 @@ partial def isMarkovCore (g : MVarId) (fuel : Nat) : MetaM (List MVarId) := g.wi
       return goals ++ side
     else
       return [g]
+  | .breakRunK =>
+    let gs ← g.applyConst ``IsMarkov.breakRunK
+    match gs with
+    | hd :: tl =>
+      let mut goals := [hd]
+      for g' in tl do
+        goals := goals ++ (← isMarkovCore g' fuel)
+      return goals
+    | _ =>
+      throwError "is_markov: expected at least one goal after the `breakRunK` step, got {gs.length}"
   | .leaf | .const =>
     /- A leaf: either something already known — a fixed distribution, a hypothesis, a program
     with its own `IsMarkov` instance — or a definition still to be looked through, or a constant
@@ -252,7 +283,7 @@ def shareDuplicateGoals (gs : List MVarId) : MetaM (List MVarId) := do
 
 /-- A program with no parameter denotes a probability measure as soon as the constant family it
 defines is a Markov kernel. -/
-lemma isProbabilityMeasure_of_isMarkov {α : Type*} [MeasurableSpace α] {μ : Measure α}
+lemma _root_.isProbabilityMeasure_of_isMarkov {α : Type*} [MeasurableSpace α] {μ : Measure α}
     (h : IsMarkov fun _ : Unit ↦ μ) : IsProbabilityMeasure μ :=
   h.isProbabilityMeasure ()
 

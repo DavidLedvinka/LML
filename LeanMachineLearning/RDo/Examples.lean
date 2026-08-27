@@ -1,7 +1,5 @@
 module
 
-public import LeanMachineLearning.RDo.Monad.Instances
-public import LeanMachineLearning.RDo.Monad.ForInInstances
 public import LeanMachineLearning.RDo.Tactic.Elab
 public import LeanMachineLearning.ForMathlib.MeasureTheory.Order.MeasurableArg
 public import LeanMachineLearning.SequentialLearning.Algorithm
@@ -11,96 +9,99 @@ set_option linter.style.header false
 
 @[expose] public section
 
-open MeasureTheory ProbabilityTheory Measure
+open MeasureTheory ProbabilityTheory
 
-/- # Nonpolymorphic examples -/
+noncomputable section
 
-universe u v
+/- # Term decomposition -/
 
-noncomputable def measureSample : Measure Bool := rdo
-  let x ← bernoulliMeasure true false ⟨(1 : ℝ) / 2, by norm_num⟩
-  let y ← bernoulliMeasure true false ⟨(1 : ℝ) / 2, by norm_num⟩
-  return x + y
+variable (μ : Measure ℝ) [hμ : IsProbabilityMeasure μ]
 
-instance : IsProbabilityMeasure measureSample := by
-  is_markov
-
-def pseudoSample : Rand Bool := do
-  let x ← Random.randBool
-  let y ← Random.randBool
-  return x + y
-
-/- # Polymorphic examples -/
-
-variable {m : (α : Type) → [MeasurableSpace α] → Type v} [MeasurableSpaceMonad m]
-
-class HasBit (m : (α : Type) → MeasurableSpace α → Type v) where
-  bit : m Bool (by infer_instance)
-
-noncomputable instance : HasBit Measure where
-  bit := bernoulliMeasure true false ⟨(1 : ℝ) / 2, by norm_num⟩
-
-instance : HasBit PseudoRandomM where
-  bit := Random.randBool
-
-def indepAnd [HasBit m] : m Bool := rdo
-  let x ← HasBit.bit
-  let y ← HasBit.bit
-  return x && y
-
-noncomputable def indepAndMeasure : Measure Bool := indepAnd (m := Measure)
-
-def indepAndGen : PseudoRandomM Bool := indepAnd (m := PseudoRandomM)
-
-variable {α : Type*} [MeasurableSpace α]
-
-def sampleBitsArray [HasBit m] (n : ℕ) : m (Array Bool) := rdo
-  let mut xs : Array Bool := #[]
-  for _ in List.range n rdo
-    let b ← HasBit.bit (m := m)
-    xs := xs.push b
-  return xs
-
-variable (μ : Measure ℝ) (as : List ℝ) [IsProbabilityMeasure μ]
-
-variable (n : ℕ) (f : Vector ℝ n → Vector ℝ n) (hf : Measurable f)
-
-def tt := μ
-
-noncomputable
-def test (vs : Vector ℝ n) : Measure ℝ := rdo
-  let mut x ← μ
-  for i in f vs rdo
-    x := x + i
+def test1 : Measure ℝ := rdo
+  let x ← μ
   return x
 
-example : IsMarkov (test μ n f) := by
-  is_markov
+example : IsProbabilityMeasure (test1 μ) := by
+  unfold test1
+  infer_instance
 
-variable (νs : List (Measure ℝ)) (h : ∀ ν ∈ νs, IsProbabilityMeasure ν)
-
-noncomputable
 def test2 : Measure ℝ := rdo
-  let mut x := 0
-  for w in νs rdo
-    let y ← w
-    x := x + y
-  return x
+  let x ← μ
+  let y ← μ
+  return x + y
 
-example : IsProbabilityMeasure (test2 νs) := by
+example : IsProbabilityMeasure (test2 μ) := by
+  unfold test2
+  apply isProbabilityMeasure_of_isMarkov
+  refine IsMarkov.mBind ?_ ?_
+  · apply IsMarkov.const
+    infer_instance
+  · refine IsMarkov.mBind ?_ ?_
+    · apply IsMarkov.const
+      infer_instance
+    · apply IsMarkov.mPure_comp
+      fun_prop
+
+def test3 (c : ℝ) : Measure ℝ := rdo
+  let x ← μ
+  let y ← μ
+  return x + y + c
+
+example : IsMarkov (test3 μ) := by
+  unfold test3
+  refine IsMarkov.mBind ?_ ?_
+  · apply IsMarkov.const
+    infer_instance
+  · refine IsMarkov.mBind ?_ ?_
+    · apply IsMarkov.const
+      infer_instance
+    · apply IsMarkov.mPure_comp
+      fun_prop
+
+/- # The `is_markov` tactic -/
+
+example : IsProbabilityMeasure (test1 μ) := by is_markov
+
+example : IsProbabilityMeasure (test2 μ) := by is_markov
+
+example : IsMarkov (test3 μ) := by is_markov
+
+example (ν : Measure ℝ) : IsMarkov (test3 ν) := by
+  is_markov
+  sorry
+
+def test4 (f : ℝ → ℝ) {n : ℕ} (hist : Vector ℝ n) : Measure ℝ := rdo
+  let mut S := 0
+  for r in hist rdo
+    S := S + r
+  S := S / n
+  let x ← gaussianReal S 1
+  return f x
+
+example (f : ℝ → ℝ) {n : ℕ} : IsMarkov (test4 f (n := n)) := by
+  is_markov
+  sorry
+
+example {f : ℝ → ℝ} (hf : Measurable f) {n : ℕ} : IsMarkov (test4 f (n := n)) := by
   is_markov
 
+def test5 : Measure ℝ := rdo
+  for _ in List.range 10 rdo
+    let x ← gaussianReal 0 1
+    if x > 0 then
+      return x
+  return 0
+
+example : IsProbabilityMeasure test5 := by
+  is_markov
 
 /- # Thompson sampling -/
 
-/-- Gaussian Thompson sampling: rewards have known variance `1` and each arm has an independent
-`N(0, 1)` prior. `N j` is the posterior precision of arm `j` and `S j` its sum of rewards, so
-`θ j` is sampled from the posterior `N(S j / N j, 1 / N j)`. The argmax is played. -/
-noncomputable def thompson {K n : ℕ} (hK : 0 < K) (history : Vector (Fin K × ℝ) n) :
+noncomputable def thompson {K n : ℕ} (hK : 0 < K) (hist : Vector (Fin K × ℝ) n) :
     Measure (Fin K) := rdo
   let mut N : Fin K → ℝ := fun _ ↦ 1
   let mut S : Fin K → ℝ := fun _ ↦ 0
-  for (a, r) in history rdo
+  for (a, r) in hist rdo
     N := fun j ↦ if j = a then N j + 1 else N j
     S := fun j ↦ if j = a then S j + r else S j
   let mut θ : Fin K → ℝ := fun _ ↦ 0
@@ -133,10 +134,14 @@ instance : IsMarkov (thompson (n := n) hK) := by
 
 instance : IsMarkovKernel <| IsMarkov.toKernel (thompson (n := n) hK) := inferInstance
 
-/- open Learning
+def Vector.v_equiv {α : Type*} [MeasurableSpace α] {n : ℕ} : (Finset.Iic n → α) ≃ᵐ Vector α n := by
+  sorry
 
+open Learning in
 example : Algorithm (Fin K) ℝ where
   policy n :=
-    (IsMarkov.toKernel (thompson (n := n) hK)).comap Vector.equivFn (by fun_prop) -/
+    (IsMarkov.toKernel (thompson (n := n) hK)).comap
+      (Vector.v_equiv (α := Fin K × ℝ) (n := n)) (by fun_prop)
+  p0 := IsMarkov.toKernel (thompson (n := 0) hK) #v[]
 
 end

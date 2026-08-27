@@ -32,11 +32,13 @@ public import LeanMachineLearning.Online.Bandit.RewardByCountMeasure
 public import LeanMachineLearning.Online.Bandit.SumRewards
 public import LeanMachineLearning.RDo.Examples
 public import LeanMachineLearning.RDo.Measurable
+public import LeanMachineLearning.RDo.Monad.Examples
 public import LeanMachineLearning.RDo.Monad.ForInInstances
 public import LeanMachineLearning.RDo.Monad.Instances
 public import LeanMachineLearning.RDo.Monad.MeasurableSpace
 public import LeanMachineLearning.RDo.Monad.Notation
 public import LeanMachineLearning.RDo.Tactic.Elab
+public import LeanMachineLearning.RDo.Tactic.ForInStep
 public import LeanMachineLearning.RDo.Tactic.IsMarkov
 public import LeanMachineLearning.RDo.Tactic.Lemmas
 public import LeanMachineLearning.SequentialLearning.Algorithm

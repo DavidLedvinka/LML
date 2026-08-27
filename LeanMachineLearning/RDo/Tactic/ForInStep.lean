@@ -53,6 +53,9 @@ lemma isDone_yield (b : β) : (ForInStep.yield b).isDone = false := rfl
 variable {α γ : Type*} [MeasurableSpace α] [MeasurableSpace β] [MeasurableSpace γ]
 
 @[fun_prop]
+lemma measurable_done : Measurable (ForInStep.done : β → ForInStep β) := fun _ hs => hs.2
+
+@[fun_prop]
 lemma measurable_yield : Measurable (ForInStep.yield : β → ForInStep β) := fun _ hs => hs.1
 
 @[fun_prop]

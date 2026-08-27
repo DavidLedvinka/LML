@@ -14,7 +14,6 @@ public import Mathlib.Data.List.OfFn
 public import Mathlib.Probability.Distributions.Gaussian.Real
 
 /-!
-
 # Markov property of `rdo` programs
 
 This file contains lemmas about the Markov property of `rdo` programs, i.e. measurability and
@@ -27,22 +26,26 @@ complex program to the Markov property/measurability of its underlying mathemati
 
 * `mPure_comp`: `rdo`'s `return e`, for an expression `e` depending measurably on the parameter, is
   Markovian.
-* `measurable_bind`: Binding a Markov kernel `κ` with a family `η` that is jointly measurable in
-the parameter and in the bound variable is measurable in the parameter.
-* `mBind`: Binding a Markov kernel `κ` with a family `η` that is Markovian in the parameter and the
-bound variable is Markovian in the parameter.
+* `measurable_bind`: Binding a Markov kernel `κ` with a family `η` that is jointly measurable in the
+  parameter and in the bound variable is measurable in the parameter.
+* `mBind`: Binding a Markov kernel `κ` with a family `η` that is Markovian in the parameter and in
+  the bound variable is Markovian in the parameter.
+* `gaussianReal`: A Gaussian distribution whose mean and variance depend measurably on the parameter
+  is Markovian in the parameter.
 * `comp`: Composing a Markov kernel `κ` with a measurable function `g` is Markovian in the
-parameter.
+  parameter.
 * `ite`: A conditional `rdo` program that chooses between two Markov kernels `κ` and `η` based on a
-measurable predicate `p` is Markovian in the parameter.
+  measurable predicate `p` is Markovian in the parameter.
 * `dite`: A dependent conditional `rdo` program that chooses between two Markov kernels `κ` and `η`
-based on a measurable predicate `p` is Markovian in the parameter.
+  based on a measurable predicate `p` is Markovian in the parameter.
 * `forInList`: A `for` loop over a list, whose initial state depends measurably on the parameter and
-whose body is Markovian in the parameter and in the state, is Markovian in the parameter.
+  whose body is Markovian in the parameter and in the state, is Markovian in the parameter.
 * `forInArray`, `forInVector`: The same statement for a `for` loop over an array or a vector.
 * `forInList_comp`, `forInArray_comp`, `forInVector_comp`: The same three, for a loop over a
-collection the program takes as an argument. The body is then asked to be Markovian jointly in the
-parameter and in the element, which the fixed collections do not need.
+  collection the program takes as an argument. The body is then asked to be Markovian jointly in the
+  parameter and in the element, which the fixed collections do not need.
+* `breakRunK`: The case analysis a program performs after a loop that returns early, on the `Option`
+  slot holding the returned value, is Markovian as soon as both of its branches are.
 -/
 
 @[expose] public section
@@ -342,5 +345,36 @@ lemma forInVector_comp [MeasurableSpace ι] {n : ℕ} {as : γ → Vector ι n} 
     (hf : IsMarkov fun p : (γ × ι) × σ ↦ f p.1.1 p.1.2 p.2) :
     IsMarkov fun c ↦ MeasurableSpaceForIn.forIn (m := Measure) (as c) (b c) (f c) :=
   forInArray_comp (by fun_prop) hb hf
+
+private lemma measurable_breakRunK {o : α → Option γ} (ho : Measurable o)
+    {breakK : α → β} {successK : α → γ → β} (h_break : Measurable breakK)
+    (h_success : Measurable fun p : α × γ ↦ successK p.1 p.2) :
+    Measurable fun a ↦ Break.runK (o a) (fun _ ↦ breakK a) (successK a) := by
+  rcases isEmpty_or_nonempty γ with hγ | hne
+  · have key : (fun a ↦ Break.runK (o a) (fun _ ↦ breakK a) (successK a)) = breakK := by
+      funext a
+      cases h : o a with
+      | none => simp [Break.runK]
+      | some r => exact hγ.elim r
+    rw [key]
+    exact h_break
+  · obtain ⟨c₀⟩ := hne
+    have key : (fun a ↦ Break.runK (o a) (fun _ ↦ breakK a) (successK a))
+        = fun a ↦ if (o a).isSome then successK a ((o a).getD c₀) else breakK a := by
+      funext a
+      cases h : o a <;> simp [Break.runK]
+    rw [key]
+    refine Measurable.ite ?_ ?_ h_break
+    · measurability
+    · fun_prop
+
+lemma breakRunK {o : α → Option γ} (ho : Measurable o)
+    {breakK : α → Measure β} {successK : α → γ → Measure β} (h_break : IsMarkov breakK)
+    (h_success : IsMarkov fun p : α × γ ↦ successK p.1 p.2) :
+    IsMarkov fun a ↦ Break.runK (o a) (fun _ ↦ breakK a) (successK a) := by
+  refine ⟨measurable_breakRunK ho h_break.measurable h_success.measurable, fun a ↦ ?_⟩
+  cases h : o a with
+  | none => simpa [Break.runK] using h_break.isProbabilityMeasure a
+  | some r => simpa [Break.runK] using h_success.isProbabilityMeasure (a, r)
 
 end IsMarkov
