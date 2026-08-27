@@ -23,7 +23,6 @@ verify that a given `rdo` program is Markovian or to reduce the proof of the Mar
 complex program to the Markov property/measurability of its underlying mathematical components.
 
 ## Main results
-
 * `mPure_comp`: `rdo`'s `return e`, for an expression `e` depending measurably on the parameter, is
   Markovian.
 * `measurable_bind`: Binding a Markov kernel `κ` with a family `η` that is jointly measurable in the
