@@ -327,7 +327,7 @@ def toIsMarkovGoal (g : MVarId) : MetaM MVarId := do
 
 /-- Run several closing tactics on a goal, and keep the goal unchanged if they all fail. -/
 def tryClosingTactics (g : MVarId) : TacticM (List MVarId) := do
-  let tac ← `(tactic| try first | fun_prop | assumption)
+  let tac ← `(tactic| try first | fun_prop (disch := measurability) | assumption)
   Lean.Elab.Tactic.run g (evalTactic tac)
 
 /-- `is_markov` proves that an `rdo` program in the `MeasurableSpaceMonad` is a Markov kernel
