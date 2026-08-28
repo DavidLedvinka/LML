@@ -97,7 +97,7 @@ example : IsProbabilityMeasure test5 := by
 
 /- # Thompson sampling -/
 
-noncomputable def thompson {K n : ℕ} (hK : 0 < K) (hist : Vector (Fin K × ℝ) n) :
+def thompson {K n : ℕ} (hK : 0 < K) (hist : Vector (Fin K × ℝ) n) :
     Measure (Fin K) := rdo
   let mut N : Fin K → ℝ := fun _ ↦ 1
   let mut S : Fin K → ℝ := fun _ ↦ 0
@@ -113,11 +113,14 @@ noncomputable def thompson {K n : ℕ} (hK : 0 < K) (hist : Vector (Fin K × ℝ
 
 variable {K n : ℕ} (hK : 0 < K)
 
+attribute[fun_prop] Measurable.ite
+
 instance : IsMarkov (thompson (n := n) hK) := by
   is_markov
-  · refine ForInStep.measurable_yield.comp ?_
+  /- · refine ForInStep.measurable_yield.comp ?_
     refine Measurable.prodMk ?_ ?_
     · refine measurable_pi_lambda _ fun k ↦ ?_
+      fun_prop (disch := measurability)
       refine Measurable.ite (by measurability) ?_ ?_
       · fun_prop
       · fun_prop
@@ -130,7 +133,9 @@ instance : IsMarkov (thompson (n := n) hK) := by
     refine measurable_pi_lambda _ fun k ↦ ?_
     refine Measurable.ite (by measurability) ?_ ?_
     · fun_prop
-    · fun_prop
+    · fun_prop -/
+
+--#check (thompson (n := n) hK).algorithm
 
 instance : IsMarkovKernel <| IsMarkov.toKernel (thompson (n := n) hK) := inferInstance
 
@@ -142,5 +147,12 @@ example : Algorithm (Fin K) ℝ where
   policy n :=
     (IsMarkov.toKernel (thompson (n := n) hK)).comap Vector.v_equiv (by fun_prop)
   p0 := IsMarkov.toKernel (thompson (n := 0) hK) #v[]
+
+variable {κ : Kernel ℝ ℝ} {s : Set ℝ} (hs : MeasurableSet s)
+
+attribute[fun_prop] ProbabilityTheory.Kernel.measurable_coe
+
+example : Measurable fun a => κ a s := by
+  fun_prop (disch := measurability)
 
 end
