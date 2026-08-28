@@ -29,6 +29,8 @@ open MeasureTheory
 
 namespace RDo.Tactic
 
+initialize registerTraceClass `is_markov
+
 /-- Which `rdo` construct a program is made of, as far as the tactic is concerned. -/
 inductive Shape
   /-- `return e`, elaborated to `MeasurableSpacePure.mPure e`. -/
@@ -57,6 +59,18 @@ inductive Shape
   the leaves of the recursion. -/
   | leaf
   --deriving Inhabited
+
+instance : ToString Shape where
+  toString
+    | .mPure => "mPure"
+    | .mBind => "mBind"
+    | .comp => "comp"
+    | .ite => "ite"
+    | .dite .. => "dite"
+    | .forIn .. => "forIn"
+    | .breakRunK => "breakRunK"
+    | .const => "const"
+    | .leaf => "leaf"
 
 /-- `whnfR`, but stopping as soon as the head is `Break.runK`. That constant is an `abbrev`, hence
 reducible, so plain `whnfR` unfolds it into its matcher and the shape below is never recognised. -/
@@ -110,14 +124,17 @@ def shapeOf (κ : Expr) : MetaM Shape := do
 local context. On failure the goal is handed back unchanged. -/
 def closeLeaf (g : MVarId) : MetaM (List MVarId) := do
   if let .some proof ← trySynthInstance (← g.getType) then
+    trace[is_markov] "closed by instance synthesis"
     g.assign proof
     return []
   if ← g.assumptionCore then
+    trace[is_markov] "closed by a hypothesis of the local context"
     return []
   /- A distribution whose parameters are read off the parameter of the kernel is not an instance.
   Handing back its measurability side conditions stops the unfolding below from diving into the
   definition of the distribution itself. -/
   if let some gs ← observing? (g.applyConst ``IsMarkov.gaussianReal) then
+    trace[is_markov] "`gaussianReal` leaf: handing back the measurability of its parameters"
     return gs
   return [g]
 
@@ -158,115 +175,124 @@ partial def isMarkovCore (g : MVarId) (fuel : Nat) : MetaM (List MVarId) := g.wi
   let target ← instantiateMVars (← g.getType)
   -- `IsMarkov` takes five arguments: `γ`, `α`, their `MeasurableSpace` instances, and `κ`.
   unless target.isAppOfArity ``IsMarkov 5 do
+    trace[is_markov] "not an `IsMarkov` goal, handed back: {target}"
     return [g]
   let shape ← shapeOf target.appArg!
-  match shape with
-  | .mPure =>
-    -- `return e`: one lemma, and the measurability of `e` is left to the user.
-    g.applyConst ``IsMarkov.mPure_comp
-  | .mBind =>
-    -- `let x ← p; q`: two hypotheses, both `IsMarkov` goals, so we recurse into both.
-    let mut goals := []
-    for g' in ← g.applyConst ``IsMarkov.mBind do
-      goals := goals ++ (← isMarkovCore g' fuel)
-    return goals
-  | .comp =>
-    /- `fun c ↦ κ (g c)`: two hypotheses, one `IsMarkov` goal and one measurability goal, so we
-    recurse into the first and leave the second to the user. -/
-    let gs ← g.applyConst ``IsMarkov.comp
-    match gs with
-    | [g_is_markov, g_measurable] =>
-      return (← isMarkovCore g_is_markov fuel) ++ [g_measurable]
-    | _ =>
-      throwError "is_markov: expected two goals after the `comp` step, got {gs.length}"
-  | .ite =>
-    /- `if p c then κ c else η c`: three hypotheses, one measurability goal and two `IsMarkov`
-    goals, so we leave the first to the user and recurse into the last two -/
-    let gs ← g.applyConst ``IsMarkov.ite
-    match gs with
-    | hd :: tl =>
-      let mut goals := [hd]
-      for g' in tl do
-        goals := goals ++ (← isMarkovCore g' fuel)
-      return goals
-    | _ =>
-      throwError "is_markov: expected at least one goal after the `ite` step, got {gs.length}"
-  | .dite p tb fb =>
-    /- `if h : p c then tb c h else fb c h`. The lemma indexes its branches by the subtypes
-    `{c // p c}` and `{c // ¬ p c}`, so we reassociate the two branches into that form here
-    (`κ x = tb x.1 x.2`) and build the application ourselves. -/
-    let dom := (← inferType p).bindingDomain!
-    let notP ← withLocalDeclD `c dom fun c ↦ do
-      mkLambdaFVars #[c] (← mkAppM ``Not #[(p.beta #[c])])
-    let bundle (branch pred : Expr) : MetaM Expr := do
-      let subtype ← mkAppM ``Subtype #[pred]
-      withLocalDeclD `x subtype fun x ↦ do
-        let v ← mkAppM ``Subtype.val #[x]
-        let h ← mkAppM ``Subtype.property #[x]
-        mkLambdaFVars #[x] (mkApp2 branch v h).headBeta
-    let hp ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``Measurable #[p])
-    let hκ ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``IsMarkov #[← bundle tb p])
-    let hη ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``IsMarkov #[← bundle fb notP])
-    let proof ← mkAppM ``IsMarkov.dite #[hp, hκ, hη]
-    unless ← isDefEq (← g.getType) (← inferType proof) do
-      throwError "is_markov: the `dite` step does not match the goal {indentExpr (← g.getType)}"
-    g.assign proof
-    return (← isMarkovCore hκ.mvarId! fuel) ++ (← isMarkovCore hη.mvarId! fuel) ++ [hp.mvarId!]
-  | .forIn fixed varying =>
-    if let some gs ← observing? (g.applyConst fixed) then
-      /- Fixed collection: a measurability goal for the initial value, and
-      `∀ a ∈ as, IsMarkov fun p ↦ body p.1 a p.2` for the body. Walking through the body needs the
-      element in the local context, so it is introduced, then abstracted away again from whatever
-      the recursion did not close. -/
-      match gs with
-      | [g_measurable, g_is_markov] =>
-        let (i, g_body) ← g_is_markov.intro1P
-        let (h, g_body) ← g_body.intro1P
-        return (← (← isMarkovCore g_body fuel).mapM (abstractLoopVars #[i, h])) ++ [g_measurable]
-      | _ =>
-        throwError "is_markov: expected two goals after the `forIn` step, got {gs.length}"
-    else if let some gs ← observing? (g.applyConst varying) then
-      /- Collection read off the parameter: the body is Markovian jointly in the element, so there
-      is no element to introduce. The measurability goals are left to the user. -/
+  withTraceNode `is_markov
+      (fun _ ↦ return m!"{shape}: {target.appArg!}") do
+    match shape with
+    | .mPure =>
+      -- `return e`: one lemma, and the measurability of `e` is left to the user.
+      g.applyConst ``IsMarkov.mPure_comp
+    | .mBind =>
+      -- `let x ← p; q`: two hypotheses, both `IsMarkov` goals, so we recurse into both.
       let mut goals := []
-      let mut side := []
-      for g' in gs do
-        if (← instantiateMVars (← g'.getType)).isAppOfArity ``IsMarkov 5 then
-          goals := goals ++ (← isMarkovCore g' fuel)
-        else
-          side := side ++ [g']
-      return goals ++ side
-    else
-      return [g]
-  | .breakRunK =>
-    let gs ← g.applyConst ``IsMarkov.breakRunK
-    match gs with
-    | hd :: tl =>
-      let mut goals := [hd]
-      for g' in tl do
+      for g' in ← g.applyConst ``IsMarkov.mBind do
         goals := goals ++ (← isMarkovCore g' fuel)
       return goals
-    | _ =>
-      throwError "is_markov: expected at least one goal after the `breakRunK` step, got {gs.length}"
-  | .leaf | .const =>
-    /- A leaf: either something already known — a fixed distribution, a hypothesis, a program
-    with its own `IsMarkov` instance — or a definition still to be looked through, or a constant
-    family — a probability measure. The tactic tries to close the goal, and if it cannot, it looks
-    through the definition, or ultimately hands the goal back to the user. -/
-    let leftover ← closeLeaf g
-    -- `closeLeaf` may have proved the goal outright, or reduced it to side conditions.
-    if ← g.isAssigned then return leftover
-    /- The goal was not closed, so we try to unfold names in the head of the program until we reach
-    a known shape. If that fails, we leave the goal to the user. -/
-    match ← unfoldToKnownShape (← instantiateMVars (← g.getType)) fuel with
-    | some target => isMarkovCore (← g.change target) (fuel - 1)
-    | none =>
-      /- Nothing worked. If the family is constant, we change the goal into `IsProbabilityMeasure`
-      and let the user prove it. -/
-      if shape matches .const then
-        g.applyConst ``IsMarkov.const
+    | .comp =>
+      /- `fun c ↦ κ (g c)`: two hypotheses, one `IsMarkov` goal and one measurability goal, so we
+      recurse into the first and leave the second to the user. -/
+      let gs ← g.applyConst ``IsMarkov.comp
+      match gs with
+      | [g_is_markov, g_measurable] =>
+        return (← isMarkovCore g_is_markov fuel) ++ [g_measurable]
+      | _ =>
+        throwError "is_markov: expected two goals after the `comp` step, got {gs.length}"
+    | .ite =>
+      /- `if p c then κ c else η c`: three hypotheses, one measurability goal and two `IsMarkov`
+      goals, so we leave the first to the user and recurse into the last two -/
+      let gs ← g.applyConst ``IsMarkov.ite
+      match gs with
+      | hd :: tl =>
+        let mut goals := [hd]
+        for g' in tl do
+          goals := goals ++ (← isMarkovCore g' fuel)
+        return goals
+      | _ =>
+        throwError "is_markov: expected at least one goal after the `ite` step, got {gs.length}"
+    | .dite p tb fb =>
+      /- `if h : p c then tb c h else fb c h`. The lemma indexes its branches by the subtypes
+      `{c // p c}` and `{c // ¬ p c}`, so we reassociate the two branches into that form here
+      (`κ x = tb x.1 x.2`) and build the application ourselves. -/
+      let dom := (← inferType p).bindingDomain!
+      let notP ← withLocalDeclD `c dom fun c ↦ do
+        mkLambdaFVars #[c] (← mkAppM ``Not #[(p.beta #[c])])
+      let bundle (branch pred : Expr) : MetaM Expr := do
+        let subtype ← mkAppM ``Subtype #[pred]
+        withLocalDeclD `x subtype fun x ↦ do
+          let v ← mkAppM ``Subtype.val #[x]
+          let h ← mkAppM ``Subtype.property #[x]
+          mkLambdaFVars #[x] (mkApp2 branch v h).headBeta
+      let hp ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``Measurable #[p])
+      let hκ ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``IsMarkov #[← bundle tb p])
+      let hη ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``IsMarkov #[← bundle fb notP])
+      let proof ← mkAppM ``IsMarkov.dite #[hp, hκ, hη]
+      unless ← isDefEq (← g.getType) (← inferType proof) do
+        throwError "is_markov: the `dite` step does not match the goal {indentExpr (← g.getType)}"
+      g.assign proof
+      return (← isMarkovCore hκ.mvarId! fuel) ++ (← isMarkovCore hη.mvarId! fuel) ++ [hp.mvarId!]
+    | .forIn fixed varying =>
+      if let some gs ← observing? (g.applyConst fixed) then
+        /- Fixed collection: a measurability goal for the initial value, and
+        `∀ a ∈ as, IsMarkov fun p ↦ body p.1 a p.2` for the body. Walking through the body needs
+        the element in the local context, so it is introduced, then abstracted away again from
+        whatever the recursion did not close. -/
+        match gs with
+        | [g_measurable, g_is_markov] =>
+          let (i, g_body) ← g_is_markov.intro1P
+          let (h, g_body) ← g_body.intro1P
+          return (← (← isMarkovCore g_body fuel).mapM (abstractLoopVars #[i, h])) ++ [g_measurable]
+        | _ =>
+          throwError "is_markov: expected two goals after the `forIn` step, got {gs.length}"
+      else if let some gs ← observing? (g.applyConst varying) then
+        /- Collection read off the parameter: the body is Markovian jointly in the element, so
+        there is no element to introduce. The measurability goals are left to the user. -/
+        let mut goals := []
+        let mut side := []
+        for g' in gs do
+          if (← instantiateMVars (← g'.getType)).isAppOfArity ``IsMarkov 5 then
+            goals := goals ++ (← isMarkovCore g' fuel)
+          else
+            side := side ++ [g']
+        return goals ++ side
       else
-        return leftover
+        trace[is_markov] "neither `forIn` lemma applies, handed back"
+        return [g]
+    | .breakRunK =>
+      let gs ← g.applyConst ``IsMarkov.breakRunK
+      match gs with
+      | hd :: tl =>
+        let mut goals := [hd]
+        for g' in tl do
+          goals := goals ++ (← isMarkovCore g' fuel)
+        return goals
+      | _ =>
+        throwError "is_markov: expected at least one goal after the `breakRunK` step, \
+          got {gs.length}"
+    | .leaf | .const =>
+      /- A leaf: either something already known — a fixed distribution, a hypothesis, a program
+      with its own `IsMarkov` instance — or a definition still to be looked through, or a constant
+      family — a probability measure. The tactic tries to close the goal, and if it cannot, it
+      looks through the definition, or ultimately hands the goal back to the user. -/
+      let leftover ← closeLeaf g
+      -- `closeLeaf` may have proved the goal outright, or reduced it to side conditions.
+      if ← g.isAssigned then return leftover
+      /- The goal was not closed, so we try to unfold names in the head of the program until we
+      reach a known shape. If that fails, we leave the goal to the user. -/
+      match ← unfoldToKnownShape (← instantiateMVars (← g.getType)) fuel with
+      | some target =>
+        trace[is_markov] "unfolded the head definition to: {target.appArg!}"
+        isMarkovCore (← g.change target) (fuel - 1)
+      | none =>
+        /- Nothing worked. If the family is constant, we change the goal into
+        `IsProbabilityMeasure` and let the user prove it. -/
+        if shape matches .const then
+          trace[is_markov] "constant family, handed back as `IsProbabilityMeasure`"
+          g.applyConst ``IsMarkov.const
+        else
+          trace[is_markov] "handed back to the user"
+          return leftover
 
 /-- Hand a goal back only once: a goal repeating one already in the list is proved by sharing its
 proof. Every goal `is_markov` produces lives in the local context of the goal it started from —
@@ -328,11 +354,8 @@ example : IsProbabilityMeasure prog := by
   is_markov
 ```
 
-It automatically looks through definitions, so `unfold` is not needed before `is_markov`. The
-number of definitions it looks through is limited defaults to `8` but can be changed by passing a
-`fuel` argument:
-
-* `is_markov (fuel := 12)` looks through up to `12` definitions. -/
+Setting `set_option trace.is_markov true` prints the tree of constructs the tactic walked
+through, and how each leaf was closed. -/
 syntax (name := isMarkovTac) "is_markov" (" (" &"fuel" " := " num ")")? : tactic
 
 elab_rules : tactic
