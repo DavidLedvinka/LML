@@ -15,7 +15,7 @@ noncomputable section
 
 /- # Term decomposition -/
 
-variable (μ : Measure ℝ) [hμ : IsProbabilityMeasure μ]
+variable (μ : Measure ℝ) [IsProbabilityMeasure μ]
 
 def test1 : Measure ℝ := rdo
   let x ← μ
