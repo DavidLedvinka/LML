@@ -140,8 +140,7 @@ def Vector.v_equiv {α : Type*} [MeasurableSpace α] {n : ℕ} : (Finset.Iic n �
 open Learning in
 example : Algorithm (Fin K) ℝ where
   policy n :=
-    (IsMarkov.toKernel (thompson (n := n) hK)).comap
-      (Vector.v_equiv (α := Fin K × ℝ) (n := n)) (by fun_prop)
+    (IsMarkov.toKernel (thompson (n := n) hK)).comap Vector.v_equiv (by fun_prop)
   p0 := IsMarkov.toKernel (thompson (n := 0) hK) #v[]
 
 end
